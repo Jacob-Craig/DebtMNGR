@@ -53,57 +53,64 @@ From the browser you can:
 
 ## Database Management
 
-### Clearing / Resetting the Database
+Simple, one-line commands to dump, restore, and clear database state across **macOS**, **Linux**, and **Windows**.
 
-If you want to start with a fresh, empty database:
+### Method 1: Using Gradle (Simplest & Recommended)
 
-- **Option A (Container wipe & fresh volume - Recommended):**
-  Stops the database and destroys any persisted volume data, then starts a brand-new PostgreSQL instance:
-  ```bash
-  docker compose down -v
-  docker compose up -d
-  ```
+Gradle runs identically across all platforms without shell quirks, pipe escaping, or character encoding issues:
 
-- **Option B (Reset schema without restarting container):**
-  Drops all tables/sequences and recreates the `public` schema in the running container:
-  ```bash
-  docker compose exec -T db psql -U postgres -d debtmngr_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-  ```
-  *(When you next start or run the app, Hibernate's `ddl-auto=update` and the built-in initializers will recreate the tables and default categories automatically).*
+| Action | macOS / Linux | Windows (CMD or PowerShell) | Description |
+| :--- | :--- | :--- | :--- |
+| **Dump Database** | `./gradlew dbDump` | `gradlew dbDump` | Dumps current DB to `backup.sql`. |
+| **Restore Database** | `./gradlew dbRestore` | `gradlew dbRestore` | Resets schema & restores from `backup.sql`. |
+| **Clear Database** | `./gradlew dbClear` | `gradlew dbClear` | Wipes tables and resets schema. |
+
+> **Custom file path:** Add `-Pfile=my-backup.sql` to specify a custom filename (e.g. `./gradlew dbDump -Pfile=state_v1.sql`).
 
 ---
 
-### Saving & Restoring Database State
+### Method 2: Using Helper Scripts
 
-#### 1. Save (Backup) Database State
-To export a snapshot of all groups, participants, transactions, entries, and audit logs:
+Dedicated helper scripts are also provided in the `scripts/` directory:
 
-- **Plain SQL Dump:**
+- **macOS & Linux:**
+  ```bash
+  ./scripts/db.sh dump [filename]      # Defaults to backup.sql
+  ./scripts/db.sh restore [filename]   # Defaults to backup.sql
+  ./scripts/db.sh clear                # Wipes public schema
+  ```
+
+- **Windows (Command Prompt / PowerShell):**
+  ```cmd
+  scripts\db.bat dump [filename]       # Defaults to backup.sql
+  scripts\db.bat restore [filename]    # Defaults to backup.sql
+  scripts\db.bat clear                 # Wipes public schema
+  ```
+
+---
+
+### Method 3: Direct Docker Compose Commands
+
+If you prefer raw Docker commands:
+
+- **Clear / Fresh Volume:**
+  ```bash
+  docker compose down -v && docker compose up -d
+  ```
+
+- **Dump to SQL:**
   ```bash
   docker compose exec -T db pg_dump -U postgres -d debtmngr_db > backup.sql
   ```
 
-- **Custom Binary Format (Compressed):**
+- **Restore from SQL:**
   ```bash
-  docker compose exec -T db pg_dump -U postgres -Fc -d debtmngr_db > backup.dump
-  ```
-
-#### 2. Restore Database State
-To restore from a previous snapshot:
-
-- **From Plain SQL Dump:**
-  ```bash
-  # Clear existing schema first (recommended to avoid conflict with existing data)
+  # Clear existing schema first:
   docker compose exec -T db psql -U postgres -d debtmngr_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-
-  # Restore data
+  # Restore:
   docker compose exec -T db psql -U postgres -d debtmngr_db < backup.sql
   ```
-
-- **From Custom Binary Archive:**
-  ```bash
-  docker compose exec -T db pg_restore -U postgres -d debtmngr_db --clean --if-exists backup.dump
-  ```
+  *(Note for Windows PowerShell: use `Get-Content backup.sql | docker compose exec -T db psql -U postgres -d debtmngr_db` as `<` is not supported).*
 
 ---
 
