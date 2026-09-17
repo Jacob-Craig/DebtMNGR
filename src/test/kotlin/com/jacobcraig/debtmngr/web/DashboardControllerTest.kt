@@ -26,6 +26,13 @@ class DashboardControllerTest {
     @MockitoBean
     private lateinit var transactionService: TransactionService
 
+    @org.junit.jupiter.api.BeforeEach
+    fun setUpDefaultMocks() {
+        `when`(transactionService.getGlobalNetSummary()).thenReturn(
+            com.jacobcraig.debtmngr.service.GlobalNetSummary(0L, emptyList())
+        )
+    }
+
     @Test
     fun `GET root displays dashboard with empty state when no groups exist`() {
         `when`(groupService.getAllGroups()).thenReturn(emptyList())
@@ -52,14 +59,28 @@ class DashboardControllerTest {
 
         `when`(transactionService.getParticipantBalances(1L)).thenReturn(mapOf(10L to 1500L, 20L to -1500L))
 
+        val bobBreakdown = com.jacobcraig.debtmngr.service.ContactBreakdown(
+            contactName = "Bob",
+            totalNet = 1500L,
+            groupDebts = listOf(com.jacobcraig.debtmngr.service.ContactGroupDebt(1L, "Trip to Spain", 1500L))
+        )
+        val globalSummary = com.jacobcraig.debtmngr.service.GlobalNetSummary(
+            operatorNetTotal = 1500L,
+            contacts = listOf(bobBreakdown)
+        )
+        `when`(transactionService.getGlobalNetSummary()).thenReturn(globalSummary)
+
         mockMvc.perform(get("/"))
             .andExpect(status().isOk)
             .andExpect(view().name("dashboard"))
             .andExpect(model().attribute("groups", groups))
             .andExpect(model().attributeExists("groupBalances"))
+            .andExpect(model().attributeExists("globalSummary"))
             .andExpect(content().string(containsString("Trip to Spain")))
             .andExpect(content().string(containsString("Holiday trip")))
             .andExpect(content().string(containsString("Apartment")))
             .andExpect(content().string(containsString("+£15.00")))
+            .andExpect(content().string(containsString("Bob owes you")))
+            .andExpect(content().string(containsString("Settle Up")))
     }
 }

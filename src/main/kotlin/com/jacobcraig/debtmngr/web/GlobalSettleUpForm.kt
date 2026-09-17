@@ -1,0 +1,28 @@
+package com.jacobcraig.debtmngr.web
+
+import jakarta.validation.constraints.DecimalMin
+import jakarta.validation.constraints.Digits
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
+import org.springframework.format.annotation.DateTimeFormat
+import java.math.BigDecimal
+import java.time.LocalDate
+
+class GlobalSettleUpForm(
+    @field:NotBlank(message = "Contact must be selected")
+    var contactName: String = "",
+
+    @field:NotNull(message = "Payment direction is required")
+    var payerIsSelf: Boolean? = false,
+
+    @field:NotNull(message = "Amount is required")
+    @field:DecimalMin(value = "0.01", message = "Amount must be greater than zero")
+    @field:Digits(integer = 10, fraction = 2, message = "Amount cannot have more than 2 decimal places")
+    var amount: BigDecimal? = null,
+
+    @field:NotNull(message = "Date is required")
+    @field:DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    var date: LocalDate? = LocalDate.now(),
+
+    var notes: String? = null
+)

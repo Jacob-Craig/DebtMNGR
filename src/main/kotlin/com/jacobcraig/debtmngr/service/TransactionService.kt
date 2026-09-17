@@ -475,4 +475,191 @@ class TransactionService(
             checkNotNull(participant.id) to participant
         }
     }
+
+    /**
+     * Calculates the pairwise net debt between the operator (isSelf = true) and each other participant in the group.
+     * Returns Map<Long, Long> where key is participantId and value is the net amount owed to the operator:
+     * - positive value: participant owes operator
+     * - negative value: operator owes participant
+     */
+    @Transactional(readOnly = true)
+    fun getPairwiseDebtsWithOperator(groupId: Long): Map<Long, Long> {
+        val participants = participantRepository.findByGroupIdOrderByIdAsc(groupId)
+        val self = participants.find { it.isSelf } ?: return emptyMap()
+        val otherParticipants = participants.filter { !it.isSelf }
+        if (otherParticipants.isEmpty()) return emptyMap()
+
+        val participantByAccountId = participants.associateBy { it.account.id }
+        val transactions = transactionRepository.findByGroupIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc(groupId)
+
+        val debts = otherParticipants.associate { checkNotNull(it.id) to 0L }.toMutableMap()
+
+        for (tx in transactions) {
+            when (tx.type) {
+                TransactionType.SETTLEMENT -> {
+                    val payer = tx.payer
+                    val receiverEntry = tx.entries.find { it.type == EntryType.DEBIT }
+                    val receiver = receiverEntry?.let { participantByAccountId[it.account.id] }
+
+                    if (payer.id == self.id && receiver != null && !receiver.isSelf) {
+                        val rId = checkNotNull(receiver.id)
+                        debts[rId] = (debts[rId] ?: 0L) + tx.amount
+                    } else if (receiver?.id == self.id && !payer.isSelf) {
+                        val pId = checkNotNull(payer.id)
+                        debts[pId] = (debts[pId] ?: 0L) - tx.amount
+                    }
+                }
+                TransactionType.EXPENSE, TransactionType.ADJUSTMENT -> {
+                    if (tx.payer.id == self.id) {
+                        for (entry in tx.entries) {
+                            if (entry.type == EntryType.DEBIT) {
+                                val consumer = participantByAccountId[entry.account.id]
+                                if (consumer != null && !consumer.isSelf) {
+                                    val cId = checkNotNull(consumer.id)
+                                    debts[cId] = (debts[cId] ?: 0L) + entry.amount
+                                }
+                            }
+                        }
+                    } else {
+                        val payerId = checkNotNull(tx.payer.id)
+                        if (debts.containsKey(payerId)) {
+                            for (entry in tx.entries) {
+                                if (entry.type == EntryType.DEBIT && entry.account.id == self.account.id) {
+                                    debts[payerId] = (debts[payerId] ?: 0L) - entry.amount
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return debts
+    }
+
+    @Transactional(readOnly = true)
+    fun getGlobalNetSummary(): GlobalNetSummary {
+        val groups = groupRepository.findAll()
+        var operatorNetTotal = 0L
+
+        data class ContactEntry(val contactName: String, val groupDebt: ContactGroupDebt)
+        val contactEntries = mutableListOf<ContactEntry>()
+
+        for (group in groups) {
+            val groupId = group.id ?: continue
+            val participants = participantRepository.findByGroupIdOrderByIdAsc(groupId)
+            val self = participants.find { it.isSelf }
+            if (self != null && self.id != null) {
+                val groupRawBalances = getParticipantBalances(groupId)
+                operatorNetTotal += groupRawBalances[self.id] ?: 0L
+
+                val pairwiseDebts = getPairwiseDebtsWithOperator(groupId)
+                for (participant in participants.filter { !it.isSelf }) {
+                    val pId = checkNotNull(participant.id)
+                    val debt = pairwiseDebts[pId] ?: 0L
+                    if (debt != 0L) {
+                        contactEntries.add(
+                            ContactEntry(
+                                contactName = participant.name.trim(),
+                                groupDebt = ContactGroupDebt(
+                                    groupId = groupId,
+                                    groupName = group.name,
+                                    amount = debt
+                                )
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        val contacts = contactEntries
+            .groupBy { it.contactName.lowercase() }
+            .map { (_, entries) ->
+                val displayName = entries.first().contactName
+                val groupDebts = entries.map { it.groupDebt }.sortedBy { it.groupId }
+                val totalNet = groupDebts.sumOf { it.amount }
+                ContactBreakdown(
+                    contactName = displayName,
+                    totalNet = totalNet,
+                    groupDebts = groupDebts
+                )
+            }
+            .filter { it.totalNet != 0L || it.groupDebts.isNotEmpty() }
+            .sortedByDescending { kotlin.math.abs(it.totalNet) }
+
+        return GlobalNetSummary(
+            operatorNetTotal = operatorNetTotal,
+            contacts = contacts
+        )
+    }
+
+    @JvmOverloads
+    fun createGlobalSettlement(
+        contactName: String,
+        payerIsSelf: Boolean,
+        amount: Long,
+        date: Instant? = null,
+        notes: String? = null
+    ): List<Transaction> {
+        require(contactName.isNotBlank()) { "Contact name cannot be blank" }
+        require(amount > 0) { "Settlement amount must be positive" }
+
+        val groups = groupRepository.findAll()
+        val eligibleGroupDebts = mutableMapOf<Long, Long>()
+        val groupParticipants = mutableMapOf<Long, Pair<Participant, Participant>>()
+
+        for (group in groups) {
+            val groupId = group.id ?: continue
+            val participants = participantRepository.findByGroupIdOrderByIdAsc(groupId)
+            val self = participants.find { it.isSelf }
+            val contact = participants.find { !it.isSelf && it.name.trim().equals(contactName.trim(), ignoreCase = true) }
+
+            if (self != null && contact != null) {
+                val pairwise = getPairwiseDebtsWithOperator(groupId)
+                val contactId = checkNotNull(contact.id)
+                val netDebt = pairwise[contactId] ?: 0L
+
+                val debtInDirection = if (payerIsSelf) -netDebt else netDebt
+                if (debtInDirection > 0) {
+                    eligibleGroupDebts[groupId] = debtInDirection
+                    groupParticipants[groupId] = Pair(self, contact)
+                }
+            }
+        }
+
+        val totalDebt = eligibleGroupDebts.values.sum()
+        require(totalDebt > 0) {
+            val direction = if (payerIsSelf) "you owe $contactName" else "$contactName owes you"
+            "No outstanding debt found where $direction"
+        }
+        require(amount <= totalDebt) {
+            "Settlement amount ($amount) cannot exceed total debt ($totalDebt)"
+        }
+
+        val allocations = ProportionalSettlementCalculator.calculate(
+            totalAmount = amount,
+            debtsByGroup = eligibleGroupDebts
+        )
+
+        val createdTransactions = mutableListOf<Transaction>()
+        for ((groupId, allocatedAmount) in allocations) {
+            if (allocatedAmount <= 0) continue
+            val (self, contact) = groupParticipants.getValue(groupId)
+            val payerId = if (payerIsSelf) checkNotNull(self.id) else checkNotNull(contact.id)
+            val receiverId = if (payerIsSelf) checkNotNull(contact.id) else checkNotNull(self.id)
+
+            val settlementTx = createSettlement(
+                groupId = groupId,
+                payerId = payerId,
+                receiverId = receiverId,
+                amount = allocatedAmount,
+                date = date,
+                notes = notes
+            )
+            createdTransactions.add(settlementTx)
+        }
+
+        return createdTransactions
+    }
 }

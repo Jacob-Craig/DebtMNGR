@@ -28,8 +28,14 @@ class DashboardController(
             }
         }
 
+        val globalSummary = transactionService.getGlobalNetSummary()
+        val contactBalances = globalSummary.contacts.associate { it.contactName to it.totalNet.toFormattedBalanceModel() }
+
         model.addAttribute("groups", groups)
         model.addAttribute("groupBalances", groupBalances)
+        model.addAttribute("globalSummary", globalSummary)
+        model.addAttribute("operatorNetTotal", globalSummary.operatorNetTotal.toFormattedBalanceModel())
+        model.addAttribute("contactBalances", contactBalances)
         return "dashboard"
     }
 }
