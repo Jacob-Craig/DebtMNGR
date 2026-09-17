@@ -70,14 +70,7 @@ class GroupController(
         val rawBalances = transactionService.getParticipantBalances(groupId)
         val balances = participants.associate { p ->
             val pId = checkNotNull(p.id)
-            val net = rawBalances[pId] ?: 0L
-            pId to FormattedBalance(
-                amount = net,
-                formatted = net.toFormattedBalance(),
-                isPositive = net > 0,
-                isNegative = net < 0,
-                isZero = net == 0L
-            )
+            pId to (rawBalances[pId] ?: 0L).toFormattedBalanceModel()
         }
         val transactions = transactionService.getTransactionsForGroup(groupId, categoryId)
 

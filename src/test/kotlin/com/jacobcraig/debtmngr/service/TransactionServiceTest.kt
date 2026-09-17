@@ -589,10 +589,12 @@ class TransactionServiceTest {
             isLocked = false
         )
         `when`(
-            transactionRepository.findUnlockedTransactionsInvolvingBothAccounts(
-                1L,
-                checkNotNull(bobAccount.id),
-                checkNotNull(aliceAccount.id)
+            transactionRepository.findUnlockedTransactionsBetweenAccounts(
+                eq(1L),
+                eq(checkNotNull(bobAccount.id)),
+                eq(checkNotNull(aliceAccount.id)),
+                any(java.time.Instant::class.java) ?: java.time.Instant.now(),
+                anyLong()
             )
         ).thenReturn(listOf(priorTx))
 
@@ -612,7 +614,7 @@ class TransactionServiceTest {
         verify(transactionRepository).save(priorTx)
 
         // Verify the created settlement transaction
-        val captured = captor.allValues.last()
+        val captured = captor.allValues.first { it.type == TransactionType.SETTLEMENT }
         assertEquals("Settlement: Bob paid Alice", captured.description)
         assertEquals(1000L, captured.amount)
         assertSame(bob, captured.payer)
@@ -638,10 +640,12 @@ class TransactionServiceTest {
     @Test
     fun `createSettlement with custom notes appends notes to description`() {
         `when`(
-            transactionRepository.findUnlockedTransactionsInvolvingBothAccounts(
-                1L,
-                checkNotNull(bobAccount.id),
-                checkNotNull(aliceAccount.id)
+            transactionRepository.findUnlockedTransactionsBetweenAccounts(
+                eq(1L),
+                eq(checkNotNull(bobAccount.id)),
+                eq(checkNotNull(aliceAccount.id)),
+                any(java.time.Instant::class.java) ?: java.time.Instant.now(),
+                anyLong()
             )
         ).thenReturn(emptyList())
 
@@ -657,17 +661,19 @@ class TransactionServiceTest {
         )
 
         assertNotNull(result)
-        val captured = captor.allValues.last()
+        val captured = captor.allValues.first { it.type == TransactionType.SETTLEMENT }
         assertEquals("Settlement: Bob paid Alice - Monzo transfer", captured.description)
     }
 
     @Test
     fun `createSettlement with custom date sets createdAt on transaction`() {
         `when`(
-            transactionRepository.findUnlockedTransactionsInvolvingBothAccounts(
-                1L,
-                checkNotNull(bobAccount.id),
-                checkNotNull(aliceAccount.id)
+            transactionRepository.findUnlockedTransactionsBetweenAccounts(
+                eq(1L),
+                eq(checkNotNull(bobAccount.id)),
+                eq(checkNotNull(aliceAccount.id)),
+                any(java.time.Instant::class.java) ?: java.time.Instant.now(),
+                anyLong()
             )
         ).thenReturn(emptyList())
 
@@ -684,7 +690,7 @@ class TransactionServiceTest {
         )
 
         assertNotNull(result)
-        val captured = captor.allValues.last()
+        val captured = captor.allValues.first { it.type == TransactionType.SETTLEMENT }
         assertEquals(customDate, captured.createdAt)
     }
 

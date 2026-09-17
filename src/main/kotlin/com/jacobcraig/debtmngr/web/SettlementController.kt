@@ -16,7 +16,7 @@ class SettlementController(
     private val transactionService: TransactionService
 ) {
 
-    @GetMapping(value = ["/settle", "/settlements/new"])
+    @GetMapping("/settle")
     fun settleUpForm(
         @PathVariable("groupId") groupId: Long,
         @RequestParam(name = "payerId", required = false) payerId: Long?,
@@ -48,7 +48,7 @@ class SettlementController(
         return "groups/settle"
     }
 
-    @PostMapping(value = ["/settle", "/settlements"])
+    @PostMapping("/settle")
     fun createSettlement(
         @PathVariable("groupId") groupId: Long,
         @Valid @ModelAttribute("settleForm") form: SettleUpForm,
@@ -93,14 +93,7 @@ class SettlementController(
         val rawBalances = transactionService.getParticipantBalances(groupId)
         val balances = participants.associate { p ->
             val pId = checkNotNull(p.id)
-            val net = rawBalances[pId] ?: 0L
-            pId to FormattedBalance(
-                amount = net,
-                formatted = net.toFormattedBalance(),
-                isPositive = net > 0,
-                isNegative = net < 0,
-                isZero = net == 0L
-            )
+            pId to (rawBalances[pId] ?: 0L).toFormattedBalanceModel()
         }
         model.addAttribute("group", group)
         model.addAttribute("participants", participants)

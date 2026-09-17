@@ -146,16 +146,6 @@ class TransactionService(
         val payerAccountId = checkNotNull(payer.account.id) { "Payer account must be initialized" }
         val receiverAccountId = checkNotNull(receiver.account.id) { "Receiver account must be initialized" }
 
-        val priorTransactions = transactionRepository.findUnlockedTransactionsInvolvingBothAccounts(
-            groupId = groupId,
-            account1Id = payerAccountId,
-            account2Id = receiverAccountId
-        )
-        for (priorTx in priorTransactions) {
-            priorTx.isLocked = true
-            transactionRepository.save(priorTx)
-        }
-
         val description = if (!notes.isNullOrBlank()) {
             "Settlement: ${payer.name} paid ${receiver.name} - ${notes.trim()}"
         } else {
@@ -194,7 +184,21 @@ class TransactionService(
         }
         settlement.validateDoubleEntry()
 
-        return transactionRepository.save(settlement)
+        val savedSettlement = transactionRepository.save(settlement)
+
+        val priorTransactions = transactionRepository.findUnlockedTransactionsBetweenAccounts(
+            groupId = groupId,
+            account1Id = payerAccountId,
+            account2Id = receiverAccountId,
+            beforeInstant = savedSettlement.createdAt,
+            excludeId = savedSettlement.id ?: -1L
+        )
+        for (priorTx in priorTransactions) {
+            priorTx.lock()
+            transactionRepository.save(priorTx)
+        }
+
+        return savedSettlement
     }
 
     @Transactional(readOnly = true)

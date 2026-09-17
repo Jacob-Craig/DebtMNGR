@@ -25,12 +25,19 @@ interface TransactionRepository : JpaRepository<Transaction, Long> {
         WHERE t.group.id = :groupId
           AND t.isLocked = false
           AND t.isDeleted = false
-          AND e1.account.id = :account1Id
-          AND e2.account.id = :account2Id
+          AND t.id != :excludeId
+          AND t.createdAt <= :beforeInstant
+          AND (
+            (e1.account.id = :account1Id AND e1.type = com.jacobcraig.debtmngr.domain.EntryType.CREDIT AND e2.account.id = :account2Id AND e2.type = com.jacobcraig.debtmngr.domain.EntryType.DEBIT)
+            OR
+            (e1.account.id = :account2Id AND e1.type = com.jacobcraig.debtmngr.domain.EntryType.CREDIT AND e2.account.id = :account1Id AND e2.type = com.jacobcraig.debtmngr.domain.EntryType.DEBIT)
+          )
     """)
-    fun findUnlockedTransactionsInvolvingBothAccounts(
+    fun findUnlockedTransactionsBetweenAccounts(
         @Param("groupId") groupId: Long,
         @Param("account1Id") account1Id: Long,
-        @Param("account2Id") account2Id: Long
+        @Param("account2Id") account2Id: Long,
+        @Param("beforeInstant") beforeInstant: java.time.Instant,
+        @Param("excludeId") excludeId: Long
     ): List<Transaction>
 }

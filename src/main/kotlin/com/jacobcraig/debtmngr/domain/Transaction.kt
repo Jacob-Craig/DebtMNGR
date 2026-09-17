@@ -80,4 +80,8 @@ class Transaction(
             "Transaction amount ($amount) must equal total credits ($credits)"
         }
     }
+
+    fun lock() {
+        isLocked = true
+    }
 }

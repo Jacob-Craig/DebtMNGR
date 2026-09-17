@@ -13,6 +13,17 @@ data class FormattedBalance(
 )
 
 @JvmOverloads
+fun Long.toFormattedBalanceModel(currencySymbol: String = "£"): FormattedBalance {
+    return FormattedBalance(
+        amount = this,
+        formatted = this.toFormattedBalance(currencySymbol),
+        isPositive = this > 0,
+        isNegative = this < 0,
+        isZero = this == 0L
+    )
+}
+
+@JvmOverloads
 fun Long.toFormattedBalance(currencySymbol: String = "£"): String {
     val isNeg = this < 0
     val absolute = abs(this)

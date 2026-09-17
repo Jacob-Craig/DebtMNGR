@@ -24,13 +24,7 @@ class DashboardController(
             if (self != null && self.id != null) {
                 val rawBalances = transactionService.getParticipantBalances(groupId)
                 val net = rawBalances[self.id] ?: 0L
-                groupBalances[groupId] = FormattedBalance(
-                    amount = net,
-                    formatted = net.toFormattedBalance(),
-                    isPositive = net > 0,
-                    isNegative = net < 0,
-                    isZero = net == 0L
-                )
+                groupBalances[groupId] = net.toFormattedBalanceModel()
             }
         }
 

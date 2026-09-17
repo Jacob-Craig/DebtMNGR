@@ -51,16 +51,6 @@ class SettlementControllerTest {
             .andExpect(content().string(containsString("Settle Up")))
     }
 
-    @Test
-    fun `GET settlements new also returns settle view`() {
-        `when`(groupService.getGroup(1L)).thenReturn(group)
-        `when`(groupService.getParticipants(1L)).thenReturn(listOf(alice, bob))
-        `when`(transactionService.getParticipantBalances(1L)).thenReturn(mapOf(10L to 1000L, 20L to -1000L))
-
-        mockMvc.perform(get("/groups/1/settlements/new"))
-            .andExpect(status().isOk)
-            .andExpect(view().name("groups/settle"))
-    }
 
     @Test
     fun `GET settle with query parameters pre-selects payer and receiver`() {
@@ -117,37 +107,6 @@ class SettlementControllerTest {
         )
     }
 
-    @Test
-    fun `POST settlements endpoint also creates settlement and redirects`() {
-        val createdSettlement = Transaction(
-            id = 100L,
-            group = group,
-            description = "Settlement: Bob paid Alice",
-            amount = 1000L,
-            payer = bob,
-            type = TransactionType.SETTLEMENT
-        )
-        `when`(
-            transactionService.createSettlement(
-                groupId = eq(1L),
-                payerId = eq(20L),
-                receiverId = eq(10L),
-                amount = eq(1000L),
-                date = any(),
-                notes = any()
-            )
-        ).thenReturn(createdSettlement)
-
-        mockMvc.perform(
-            post("/groups/1/settlements")
-                .param("payerId", "20")
-                .param("receiverId", "10")
-                .param("amount", "10.00")
-                .param("date", "2026-09-17")
-        )
-            .andExpect(status().is3xxRedirection)
-            .andExpect(redirectedUrl("/groups/1"))
-    }
 
     @Test
     fun `POST settle with same payer and receiver fails validation`() {
