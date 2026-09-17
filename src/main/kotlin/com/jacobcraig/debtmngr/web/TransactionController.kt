@@ -1,6 +1,7 @@
 package com.jacobcraig.debtmngr.web
 
 import com.jacobcraig.debtmngr.domain.Participant
+import com.jacobcraig.debtmngr.domain.SplitMode
 import com.jacobcraig.debtmngr.service.GroupService
 import com.jacobcraig.debtmngr.service.TransactionService
 import jakarta.validation.Valid
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.validation.BindingResult
 import org.springframework.web.bind.annotation.*
+import java.math.BigDecimal
 import java.time.ZoneOffset
 
 @Controller
@@ -42,6 +44,14 @@ class TransactionController(
         bindingResult: BindingResult,
         model: Model
     ): String {
+        if (form.splitMode == SplitMode.EQUAL) {
+            if (form.consumerIds.isEmpty()) {
+                bindingResult.rejectValue("consumerIds", "NotEmpty", "At least one consumer must be selected")
+            }
+        } else if (form.splitMode == SplitMode.EXACT) {
+            validateExactSplits(form, bindingResult)
+        }
+
         if (bindingResult.hasErrors()) {
             populateGroupAndParticipants(model, groupId)
             return "groups/transactions/new"
@@ -52,19 +62,69 @@ class TransactionController(
             val payerId = form.payerId ?: throw IllegalArgumentException("Payer is required")
             val amountMinorUnits = amount.toMinorUnits()
             val dateInstant = form.date?.atStartOfDay(ZoneOffset.UTC)?.toInstant()
-            transactionService.createExpense(
-                groupId = groupId,
-                payerId = payerId,
-                amount = amountMinorUnits,
-                description = form.description,
-                consumerIds = form.consumerIds,
-                date = dateInstant
-            )
+
+            when (form.splitMode) {
+                SplitMode.EQUAL -> {
+                    transactionService.createExpense(
+                        groupId = groupId,
+                        payerId = payerId,
+                        amount = amountMinorUnits,
+                        description = form.description,
+                        consumerIds = form.consumerIds,
+                        date = dateInstant
+                    )
+                }
+                SplitMode.EXACT -> {
+                    val exactAmountsMinor = form.exactAmounts
+                        .filterValues { it != null && it > BigDecimal.ZERO }
+                        .mapValues { checkNotNull(it.value).toMinorUnits() }
+
+                    transactionService.createExpense(
+                        groupId = groupId,
+                        payerId = payerId,
+                        amount = amountMinorUnits,
+                        description = form.description,
+                        consumerIds = exactAmountsMinor.keys.toList(),
+                        date = dateInstant,
+                        splitMode = SplitMode.EXACT,
+                        exactAmounts = exactAmountsMinor
+                    )
+                }
+            }
             return "redirect:/groups/$groupId"
         } catch (e: IllegalArgumentException) {
             bindingResult.reject("error.expense", e.message ?: "Invalid expense data")
             populateGroupAndParticipants(model, groupId)
             return "groups/transactions/new"
+        }
+    }
+
+    private fun validateExactSplits(form: CreateExpenseForm, bindingResult: BindingResult) {
+        val nonNullEntries = form.exactAmounts.filterValues { it != null }
+
+        if (nonNullEntries.values.any { it != null && it < BigDecimal.ZERO }) {
+            bindingResult.rejectValue("exactAmounts", "error.exactAmounts", "Individual split amounts cannot be negative")
+            return
+        }
+
+        val positiveEntries = nonNullEntries.filterValues { it != null && it > BigDecimal.ZERO }
+        if (positiveEntries.isEmpty()) {
+            bindingResult.rejectValue("exactAmounts", "error.exactAmounts", "At least one participant must be assigned an amount")
+            return
+        }
+
+        if (form.amount != null && !bindingResult.hasFieldErrors("amount")) {
+            val totalMinor = form.amount!!.toMinorUnits()
+            val sumMinor = positiveEntries.values.filterNotNull().sumOf { it.toMinorUnits() }
+            if (sumMinor != totalMinor) {
+                val formattedSum = sumMinor.toFormattedMoney()
+                val formattedTotal = totalMinor.toFormattedMoney()
+                bindingResult.rejectValue(
+                    "exactAmounts",
+                    "error.exactAmounts",
+                    "The sum of exact split amounts ($formattedSum) must equal the total expense amount ($formattedTotal)"
+                )
+            }
         }
     }
 

@@ -281,6 +281,133 @@ class TransactionServiceTest {
     }
 
     @Test
+    fun `createExpense with splitMode EXACT creates balanced transaction with exact split entries`() {
+        val captor = ArgumentCaptor.forClass(Transaction::class.java)
+        `when`(transactionRepository.save(captor.capture())).thenAnswer { it.arguments[0] }
+
+        val result = transactionService.createExpense(
+            groupId = 1L,
+            payerId = 10L,
+            amount = 1000L,
+            description = "Concert tickets",
+            splitMode = SplitMode.EXACT,
+            exactAmounts = mapOf(10L to 300L, 20L to 700L)
+        )
+
+        assertNotNull(result)
+        val captured = captor.value
+        assertEquals("Concert tickets", captured.description)
+        assertEquals(1000L, captured.amount)
+        assertSame(alice, captured.payer)
+        assertTrue(captured.isBalanced())
+
+        val creditEntry = captured.entries.first { it.type == EntryType.CREDIT }
+        assertEquals(1000L, creditEntry.amount)
+        assertSame(alice.account, creditEntry.account)
+
+        val debitEntries = captured.entries.filter { it.type == EntryType.DEBIT }
+        assertEquals(2, debitEntries.size)
+        val aliceDebit = debitEntries.first { it.account == alice.account }
+        val bobDebit = debitEntries.first { it.account == bob.account }
+        assertEquals(300L, aliceDebit.amount)
+        assertEquals(700L, bobDebit.amount)
+    }
+
+    @Test
+    fun `createExpense with splitMode EXACT creates debit entries only for positive shares`() {
+        val captor = ArgumentCaptor.forClass(Transaction::class.java)
+        `when`(transactionRepository.save(captor.capture())).thenAnswer { it.arguments[0] }
+
+        val result = transactionService.createExpense(
+            groupId = 1L,
+            payerId = 10L,
+            amount = 1000L,
+            description = "Solo purchase",
+            splitMode = SplitMode.EXACT,
+            exactAmounts = mapOf(10L to 1000L, 20L to 0L)
+        )
+
+        assertNotNull(result)
+        val captured = captor.value
+        val debitEntries = captured.entries.filter { it.type == EntryType.DEBIT }
+        assertEquals(1, debitEntries.size)
+        assertEquals(1000L, debitEntries.first().amount)
+        assertSame(alice.account, debitEntries.first().account)
+    }
+
+    @Test
+    fun `createExpense with splitMode EXACT and sum mismatch throws IllegalArgumentException`() {
+        val ex = assertThrows<IllegalArgumentException> {
+            transactionService.createExpense(
+                groupId = 1L,
+                payerId = 10L,
+                amount = 1000L,
+                description = "Uneven",
+                splitMode = SplitMode.EXACT,
+                exactAmounts = mapOf(10L to 400L, 20L to 500L)
+            )
+        }
+        val msg = checkNotNull(ex.message)
+        assertTrue(msg.contains("The sum of exact split amounts (900) must equal the total expense amount (1000)"))
+        verify(transactionRepository, never()).save(any())
+    }
+
+    @Test
+    fun `createExpense with splitMode EXACT and empty exact amounts throws IllegalArgumentException`() {
+        val ex = assertThrows<IllegalArgumentException> {
+            transactionService.createExpense(
+                groupId = 1L,
+                payerId = 10L,
+                amount = 1000L,
+                description = "Empty",
+                splitMode = SplitMode.EXACT,
+                exactAmounts = emptyMap<Long, Long>()
+            )
+        }
+        val msg = checkNotNull(ex.message)
+        assertEquals("At least one consumer must be assigned an amount", msg)
+        verify(transactionRepository, never()).save(any())
+    }
+
+    @Test
+    fun `createExpense with splitMode EXACT and participant from another group throws IllegalArgumentException`() {
+        val otherGroup = Group(id = 2L, name = "Other")
+        val otherParticipant = Participant(id = 99L, group = otherGroup, name = "Dave")
+        `when`(participantRepository.findById(99L)).thenReturn(Optional.of(otherParticipant))
+
+        val ex = assertThrows<IllegalArgumentException> {
+            transactionService.createExpense(
+                groupId = 1L,
+                payerId = 10L,
+                amount = 1000L,
+                description = "Cross-group exact",
+                splitMode = SplitMode.EXACT,
+                exactAmounts = mapOf(10L to 500L, 99L to 500L)
+            )
+        }
+        assertEquals("Participant 99 does not belong to group 1", ex.message)
+        verify(transactionRepository, never()).save(any())
+    }
+
+    @Test
+    fun `createExpense with splitMode EXACT and nonexistent participant throws EntityNotFoundException`() {
+        `when`(participantRepository.findById(99L)).thenReturn(Optional.empty())
+
+        val ex = assertThrows<EntityNotFoundException> {
+            transactionService.createExpense(
+                groupId = 1L,
+                payerId = 10L,
+                amount = 1000L,
+                description = "Nonexistent participant",
+                splitMode = SplitMode.EXACT,
+                exactAmounts = mapOf(10L to 500L, 99L to 500L)
+            )
+        }
+        assertEquals("Participant not found with id: 99", ex.message)
+        verify(transactionRepository, never()).save(any())
+    }
+
+    @Test
     fun `getTransactionsForGroup returns active transactions for valid group`() {
         val tx1 = Transaction(id = 1L, group = group, description = "Groceries", amount = 1000L, payer = alice)
         val tx2 = Transaction(id = 2L, group = group, description = "Utilities", amount = 5000L, payer = bob)
