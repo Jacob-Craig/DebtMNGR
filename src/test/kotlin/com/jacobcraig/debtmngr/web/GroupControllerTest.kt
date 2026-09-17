@@ -3,6 +3,7 @@ package com.jacobcraig.debtmngr.web
 import com.jacobcraig.debtmngr.domain.Group
 import com.jacobcraig.debtmngr.domain.Participant
 import com.jacobcraig.debtmngr.service.GroupService
+import com.jacobcraig.debtmngr.service.TransactionService
 import org.hamcrest.Matchers.containsString
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.*
@@ -22,6 +23,9 @@ class GroupControllerTest {
 
     @MockitoBean
     private lateinit var groupService: GroupService
+
+    @MockitoBean
+    private lateinit var transactionService: TransactionService
 
     @Test
     fun `GET new group form displays form view`() {
@@ -65,7 +69,7 @@ class GroupControllerTest {
     }
 
     @Test
-    fun `GET group detail displays group and roster`() {
+    fun `GET group detail displays group and roster with balances and transactions`() {
         val group = Group(id = 1L, name = "Trip to Spain", description = "Vacation")
         val participants = listOf(
             Participant(id = 10L, group = group, name = "Alice", isSelf = true),
@@ -73,13 +77,21 @@ class GroupControllerTest {
         )
         `when`(groupService.getGroup(1L)).thenReturn(group)
         `when`(groupService.getParticipants(1L)).thenReturn(participants)
+        `when`(transactionService.getParticipantBalances(1L)).thenReturn(mapOf(10L to 1500L, 11L to -1500L))
+        `when`(transactionService.getTransactionsForGroup(1L)).thenReturn(emptyList())
 
         mockMvc.perform(get("/groups/1"))
             .andExpect(status().isOk)
             .andExpect(view().name("groups/show"))
             .andExpect(model().attribute("group", group))
             .andExpect(model().attribute("participants", participants))
+            .andExpect(model().attributeExists("balances"))
+            .andExpect(model().attributeExists("transactions"))
             .andExpect(model().attributeExists("participantForm"))
+            .andExpect(content().string(containsString("Record Expense")))
+            .andExpect(content().string(containsString("Recent Transactions")))
+            .andExpect(content().string(containsString("+£15.00")))
+            .andExpect(content().string(containsString("-£15.00")))
     }
 
     @Test
@@ -104,6 +116,8 @@ class GroupControllerTest {
         val group = Group(id = 1L, name = "Trip to Spain")
         `when`(groupService.getGroup(1L)).thenReturn(group)
         `when`(groupService.getParticipants(1L)).thenReturn(emptyList())
+        `when`(transactionService.getParticipantBalances(1L)).thenReturn(emptyMap())
+        `when`(transactionService.getTransactionsForGroup(1L)).thenReturn(emptyList())
 
         mockMvc.perform(
             post("/groups/1/participants")

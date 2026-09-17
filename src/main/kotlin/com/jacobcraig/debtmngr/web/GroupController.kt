@@ -1,6 +1,7 @@
 package com.jacobcraig.debtmngr.web
 
 import com.jacobcraig.debtmngr.service.GroupService
+import com.jacobcraig.debtmngr.service.TransactionService
 import jakarta.validation.Valid
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
@@ -13,7 +14,10 @@ import org.springframework.web.bind.annotation.RequestMapping
 
 @Controller
 @RequestMapping("/groups")
-class GroupController(private val groupService: GroupService) {
+class GroupController(
+    private val groupService: GroupService,
+    private val transactionService: TransactionService
+) {
 
     @GetMapping("/new")
     fun newGroupForm(model: Model): String {
@@ -60,8 +64,24 @@ class GroupController(private val groupService: GroupService) {
     private fun populateGroupAndParticipants(model: Model, groupId: Long) {
         val group = groupService.getGroup(groupId)
         val participants = groupService.getParticipants(groupId)
+        val rawBalances = transactionService.getParticipantBalances(groupId)
+        val balances = participants.associate { p ->
+            val pId = checkNotNull(p.id)
+            val net = rawBalances[pId] ?: 0L
+            pId to FormattedBalance(
+                amount = net,
+                formatted = net.toFormattedBalance(),
+                isPositive = net > 0,
+                isNegative = net < 0,
+                isZero = net == 0L
+            )
+        }
+        val transactions = transactionService.getTransactionsForGroup(groupId)
+
         model.addAttribute("group", group)
         model.addAttribute("participants", participants)
+        model.addAttribute("balances", balances)
+        model.addAttribute("transactions", transactions)
     }
 
     @PostMapping("/{id}/participants/{participantId}/self")

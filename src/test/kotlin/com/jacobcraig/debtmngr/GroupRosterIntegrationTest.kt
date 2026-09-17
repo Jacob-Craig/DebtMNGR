@@ -1,9 +1,7 @@
 package com.jacobcraig.debtmngr
 
 import com.jacobcraig.debtmngr.domain.Group
-import com.jacobcraig.debtmngr.repository.AccountRepository
-import com.jacobcraig.debtmngr.repository.GroupRepository
-import com.jacobcraig.debtmngr.repository.ParticipantRepository
+import com.jacobcraig.debtmngr.repository.*
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
 import org.junit.jupiter.api.Assertions.*
@@ -33,8 +31,16 @@ class GroupRosterIntegrationTest {
     @Autowired
     private lateinit var accountRepository: AccountRepository
 
+    @Autowired
+    private lateinit var transactionRepository: TransactionRepository
+
+    @Autowired
+    private lateinit var entryRepository: EntryRepository
+
     @BeforeEach
     fun cleanDatabase() {
+        entryRepository.deleteAll()
+        transactionRepository.deleteAll()
         participantRepository.deleteAll()
         accountRepository.deleteAll()
         groupRepository.deleteAll()
