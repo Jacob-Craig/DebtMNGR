@@ -10,6 +10,7 @@ import com.jacobcraig.debtmngr.repository.TransactionRepository
 import jakarta.persistence.EntityNotFoundException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 
 @Service
@@ -20,7 +21,8 @@ class TransactionService(
     private val transactionRepository: TransactionRepository,
     private val entryRepository: EntryRepository,
     private val categoryRepository: CategoryRepository,
-    private val auditLogRepository: AuditLogRepository
+    private val auditLogRepository: AuditLogRepository,
+    private val objectMapper: ObjectMapper
 ) {
 
     @JvmOverloads
@@ -46,37 +48,16 @@ class TransactionService(
 
         require(payer.group.id == groupId) { "Payer does not belong to group $groupId" }
 
-        val (shares, participantMap) = when (splitMode) {
-            SplitMode.EQUAL -> {
-                require(consumerIds.isNotEmpty()) { "At least one consumer must be selected" }
-                val distinctConsumerIds = consumerIds.distinct()
-                val participants = loadGroupParticipants(groupId, distinctConsumerIds, "Consumer")
-                val shares = EqualSplitCalculator.calculate(
-                    totalAmount = amount,
-                    payerId = payerId,
-                    consumerIds = distinctConsumerIds
-                )
-                shares to participants
-            }
-            SplitMode.EXACT -> {
-                require(exactAmounts.isNotEmpty()) { "At least one consumer must be assigned an amount" }
-                val participants = loadGroupParticipants(groupId, exactAmounts.keys, "Participant")
-                val shares = ExactSplitCalculator.calculate(
-                    totalAmount = amount,
-                    exactAmounts = exactAmounts
-                )
-                shares to participants
-            }
-        }
+        val (shares, participantMap) = calculateShares(
+            groupId = groupId,
+            amount = amount,
+            payerId = payerId,
+            splitMode = splitMode,
+            consumerIds = consumerIds,
+            exactAmounts = exactAmounts
+        )
 
-        val category = categoryId?.let { catId ->
-            val cat = categoryRepository.findById(catId)
-                .orElseThrow { EntityNotFoundException("Category not found with id: $catId") }
-            require(cat.isAvailableIn(group)) {
-                "Category ${cat.name} does not belong to group $groupId"
-            }
-            cat
-        }
+        val category = resolveCategory(categoryId, group)
 
         val transaction = Transaction(
             group = group,
@@ -88,36 +69,7 @@ class TransactionService(
             createdAt = date ?: Instant.now()
         )
 
-        // Payer CREDIT entry for full amount
-        val creditEntry = Entry(
-            transaction = transaction,
-            account = payer.account,
-            type = EntryType.CREDIT,
-            amount = amount
-        )
-        transaction.addEntry(creditEntry)
-
-        // Consumer DEBIT entries for each share
-        for (share in shares) {
-            if (share.amount > 0) {
-                val consumer = participantMap.getValue(share.participantId)
-                val debitEntry = Entry(
-                    transaction = transaction,
-                    account = consumer.account,
-                    type = EntryType.DEBIT,
-                    amount = share.amount
-                )
-                transaction.addEntry(debitEntry)
-            }
-        }
-
-        // Strictly enforce double-entry invariant and verify debits and credits equal amount
-        val totalDebits = transaction.totalDebits()
-        val totalCredits = transaction.totalCredits()
-        check(totalDebits == amount && totalCredits == amount) {
-            "Total debits ($totalDebits) and credits ($totalCredits) must equal expense amount ($amount)"
-        }
-        transaction.validateDoubleEntry()
+        addEntriesAndValidate(transaction, payer, shares, participantMap)
 
         return transactionRepository.save(transaction)
     }
@@ -301,37 +253,16 @@ class TransactionService(
             .orElseThrow { EntityNotFoundException("Participant not found with id: $payerId") }
         require(payer.group.id == groupId) { "Payer does not belong to group $groupId" }
 
-        val (shares, participantMap) = when (splitMode) {
-            SplitMode.EQUAL -> {
-                require(consumerIds.isNotEmpty()) { "At least one consumer must be selected" }
-                val distinctConsumerIds = consumerIds.distinct()
-                val participants = loadGroupParticipants(groupId, distinctConsumerIds, "Consumer")
-                val shares = EqualSplitCalculator.calculate(
-                    totalAmount = amount,
-                    payerId = payerId,
-                    consumerIds = distinctConsumerIds
-                )
-                shares to participants
-            }
-            SplitMode.EXACT -> {
-                require(exactAmounts.isNotEmpty()) { "At least one consumer must be assigned an amount" }
-                val participants = loadGroupParticipants(groupId, exactAmounts.keys, "Participant")
-                val shares = ExactSplitCalculator.calculate(
-                    totalAmount = amount,
-                    exactAmounts = exactAmounts
-                )
-                shares to participants
-            }
-        }
+        val (shares, participantMap) = calculateShares(
+            groupId = groupId,
+            amount = amount,
+            payerId = payerId,
+            splitMode = splitMode,
+            consumerIds = consumerIds,
+            exactAmounts = exactAmounts
+        )
 
-        val category = categoryId?.let { catId ->
-            val cat = categoryRepository.findById(catId)
-                .orElseThrow { EntityNotFoundException("Category not found with id: $catId") }
-            require(cat.isAvailableIn(oldTx.group)) {
-                "Category ${cat.name} does not belong to group $groupId"
-            }
-            cat
-        }
+        val category = resolveCategory(categoryId, oldTx.group)
 
         val priorState = serializeTransactionState(oldTx)
         oldTx.softDelete()
@@ -356,33 +287,7 @@ class TransactionService(
             originalTransaction = oldTx
         )
 
-        val creditEntry = Entry(
-            transaction = newTransaction,
-            account = payer.account,
-            type = EntryType.CREDIT,
-            amount = amount
-        )
-        newTransaction.addEntry(creditEntry)
-
-        for (share in shares) {
-            if (share.amount > 0) {
-                val consumer = participantMap.getValue(share.participantId)
-                val debitEntry = Entry(
-                    transaction = newTransaction,
-                    account = consumer.account,
-                    type = EntryType.DEBIT,
-                    amount = share.amount
-                )
-                newTransaction.addEntry(debitEntry)
-            }
-        }
-
-        val totalDebits = newTransaction.totalDebits()
-        val totalCredits = newTransaction.totalCredits()
-        check(totalDebits == amount && totalCredits == amount) {
-            "Total debits ($totalDebits) and credits ($totalCredits) must equal expense amount ($amount)"
-        }
-        newTransaction.validateDoubleEntry()
+        addEntriesAndValidate(newTransaction, payer, shares, participantMap)
 
         return transactionRepository.save(newTransaction)
     }
@@ -411,7 +316,44 @@ class TransactionService(
             .orElseThrow { EntityNotFoundException("Participant not found with id: $payerId") }
         require(payer.group.id == groupId) { "Payer does not belong to group $groupId" }
 
-        val (shares, participantMap) = when (splitMode) {
+        val (shares, participantMap) = calculateShares(
+            groupId = groupId,
+            amount = amount,
+            payerId = payerId,
+            splitMode = splitMode,
+            consumerIds = consumerIds,
+            exactAmounts = exactAmounts
+        )
+
+        val adjustment = Transaction(
+            group = originalTx.group,
+            description = description.trim(),
+            amount = amount,
+            payer = payer,
+            type = TransactionType.ADJUSTMENT,
+            category = originalTx.category,
+            originalTransaction = originalTx,
+            createdAt = date ?: Instant.now()
+        )
+
+        addEntriesAndValidate(adjustment, payer, shares, participantMap)
+
+        return transactionRepository.save(adjustment)
+    }
+
+    /**
+     * Calculates shares based on split mode and resolves participants.
+     * Shared by createExpense, editExpense, and createAdjustment.
+     */
+    private fun calculateShares(
+        groupId: Long,
+        amount: Long,
+        payerId: Long,
+        splitMode: SplitMode,
+        consumerIds: List<Long>,
+        exactAmounts: Map<Long, Long>
+    ): Pair<List<SplitShare>, Map<Long, Participant>> {
+        return when (splitMode) {
             SplitMode.EQUAL -> {
                 require(consumerIds.isNotEmpty()) { "At least one consumer must be selected" }
                 val distinctConsumerIds = consumerIds.distinct()
@@ -433,71 +375,91 @@ class TransactionService(
                 shares to participants
             }
         }
+    }
 
-        val adjustment = Transaction(
-            group = originalTx.group,
-            description = description.trim(),
-            amount = amount,
-            payer = payer,
-            type = TransactionType.ADJUSTMENT,
-            category = originalTx.category,
-            originalTransaction = originalTx,
-            createdAt = date ?: Instant.now()
-        )
-
+    /**
+     * Adds credit and debit entries to a transaction and validates the double-entry invariant.
+     * Shared by createExpense, editExpense, and createAdjustment.
+     */
+    private fun addEntriesAndValidate(
+        transaction: Transaction,
+        payer: Participant,
+        shares: List<SplitShare>,
+        participantMap: Map<Long, Participant>
+    ) {
+        // Payer CREDIT entry for full amount
         val creditEntry = Entry(
-            transaction = adjustment,
+            transaction = transaction,
             account = payer.account,
             type = EntryType.CREDIT,
-            amount = amount
+            amount = transaction.amount
         )
-        adjustment.addEntry(creditEntry)
+        transaction.addEntry(creditEntry)
 
+        // Consumer DEBIT entries for each share
         for (share in shares) {
             if (share.amount > 0) {
                 val consumer = participantMap.getValue(share.participantId)
                 val debitEntry = Entry(
-                    transaction = adjustment,
+                    transaction = transaction,
                     account = consumer.account,
                     type = EntryType.DEBIT,
                     amount = share.amount
                 )
-                adjustment.addEntry(debitEntry)
+                transaction.addEntry(debitEntry)
             }
         }
 
-        val totalDebits = adjustment.totalDebits()
-        val totalCredits = adjustment.totalCredits()
-        check(totalDebits == amount && totalCredits == amount) {
-            "Total debits ($totalDebits) and credits ($totalCredits) must equal adjustment amount ($amount)"
+        // Strictly enforce double-entry invariant
+        val totalDebits = transaction.totalDebits()
+        val totalCredits = transaction.totalCredits()
+        check(totalDebits == transaction.amount && totalCredits == transaction.amount) {
+            "Total debits ($totalDebits) and credits ($totalCredits) must equal transaction amount (${transaction.amount})"
         }
-        adjustment.validateDoubleEntry()
-
-        return transactionRepository.save(adjustment)
+        transaction.validateDoubleEntry()
     }
 
+    /**
+     * Serializes the prior state of a transaction for audit logging.
+     * Uses Jackson for reliable JSON generation.
+     */
     private fun serializeTransactionState(transaction: Transaction): String {
-        fun escape(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
+        val state = mapOf(
+            "id" to transaction.id,
+            "description" to transaction.description,
+            "amount" to transaction.amount,
+            "payerId" to transaction.payer.id,
+            "payerName" to transaction.payer.name,
+            "type" to transaction.type.name,
+            "categoryId" to transaction.category?.id,
+            "categoryName" to transaction.category?.name,
+            "isLocked" to transaction.isLocked,
+            "isDeleted" to transaction.isDeleted,
+            "createdAt" to transaction.createdAt.toString(),
+            "entries" to transaction.entries.map { entry ->
+                mapOf(
+                    "id" to entry.id,
+                    "accountId" to entry.account.id,
+                    "type" to entry.type.name,
+                    "amount" to entry.amount
+                )
+            }
+        )
+        return objectMapper.writeValueAsString(state)
+    }
 
-        val entriesJson = transaction.entries.joinToString(separator = ",", prefix = "[", postfix = "]") { entry ->
-            """{"id":${entry.id},"accountId":${entry.account.id},"type":"${entry.type.name}","amount":${entry.amount}}"""
-        }
-
-        return buildString {
-            append("{")
-            append(""""id":${transaction.id},""")
-            append(""""description":"${escape(transaction.description)}",""")
-            append(""""amount":${transaction.amount},""")
-            append(""""payerId":${transaction.payer.id},""")
-            append(""""payerName":"${escape(transaction.payer.name)}",""")
-            append(""""type":"${transaction.type.name}",""")
-            append(""""categoryId":${transaction.category?.id},""")
-            append(""""categoryName":${transaction.category?.name?.let { "\"${escape(it)}\"" } ?: "null"},""")
-            append(""""isLocked":${transaction.isLocked},""")
-            append(""""isDeleted":${transaction.isDeleted},""")
-            append(""""createdAt":"${transaction.createdAt}",""")
-            append(""""entries":$entriesJson""")
-            append("}")
+    /**
+     * Resolves a category by ID, validating it belongs to the given group.
+     * Returns null if categoryId is null.
+     */
+    private fun resolveCategory(categoryId: Long?, group: Group): Category? {
+        return categoryId?.let { catId ->
+            val cat = categoryRepository.findById(catId)
+                .orElseThrow { EntityNotFoundException("Category not found with id: $catId") }
+            require(cat.isAvailableIn(group)) {
+                "Category ${cat.name} does not belong to group ${group.id}"
+            }
+            cat
         }
     }
 

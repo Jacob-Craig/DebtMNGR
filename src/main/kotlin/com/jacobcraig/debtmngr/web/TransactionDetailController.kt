@@ -95,7 +95,7 @@ class TransactionDetailController(
                 bindingResult.rejectValue("consumerIds", "NotEmpty", "At least one consumer must be selected")
             }
         } else if (form.splitMode == SplitMode.EXACT) {
-            validateExactSplits(form.exactAmounts, form.amount, bindingResult)
+            ExactSplitValidator.validate(form.exactAmounts, form.amount, bindingResult)
         }
 
         val customName = form.customCategoryName?.trim()
@@ -224,7 +224,7 @@ class TransactionDetailController(
                 bindingResult.rejectValue("consumerIds", "NotEmpty", "At least one consumer must be selected")
             }
         } else if (form.splitMode == SplitMode.EXACT) {
-            validateExactSplits(form.exactAmounts, form.amount, bindingResult)
+            ExactSplitValidator.validate(form.exactAmounts, form.amount, bindingResult)
         }
 
         if (bindingResult.hasErrors()) {
@@ -279,38 +279,7 @@ class TransactionDetailController(
         }
     }
 
-    private fun validateExactSplits(
-        exactAmounts: Map<Long, BigDecimal?>,
-        totalAmount: BigDecimal?,
-        bindingResult: BindingResult
-    ) {
-        val nonNullEntries = exactAmounts.filterValues { it != null }
 
-        if (nonNullEntries.values.any { it != null && it < BigDecimal.ZERO }) {
-            bindingResult.rejectValue("exactAmounts", "error.exactAmounts", "Individual split amounts cannot be negative")
-            return
-        }
-
-        val positiveEntries = nonNullEntries.filterValues { it != null && it > BigDecimal.ZERO }
-        if (positiveEntries.isEmpty()) {
-            bindingResult.rejectValue("exactAmounts", "error.exactAmounts", "At least one participant must be assigned an amount")
-            return
-        }
-
-        if (totalAmount != null && !bindingResult.hasFieldErrors("amount")) {
-            val totalMinor = totalAmount.toMinorUnits()
-            val sumMinor = positiveEntries.values.filterNotNull().sumOf { it.toMinorUnits() }
-            if (sumMinor != totalMinor) {
-                val formattedSum = sumMinor.toFormattedMoney()
-                val formattedTotal = totalMinor.toFormattedMoney()
-                bindingResult.rejectValue(
-                    "exactAmounts",
-                    "error.exactAmounts",
-                    "The sum of exact split amounts ($formattedSum) must equal the total expense amount ($formattedTotal)"
-                )
-            }
-        }
-    }
 
     private fun populateEditModel(model: Model, groupId: Long, form: EditExpenseForm, transactionId: Long) {
         val group = groupService.getGroup(groupId)

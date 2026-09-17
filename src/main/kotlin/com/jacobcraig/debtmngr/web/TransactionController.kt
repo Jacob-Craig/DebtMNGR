@@ -51,7 +51,7 @@ class TransactionController(
                 bindingResult.rejectValue("consumerIds", "NotEmpty", "At least one consumer must be selected")
             }
         } else if (form.splitMode == SplitMode.EXACT) {
-            validateExactSplits(form, bindingResult)
+            ExactSplitValidator.validate(form.exactAmounts, form.amount, bindingResult)
         }
 
         val customName = form.customCategoryName?.trim()
@@ -118,35 +118,7 @@ class TransactionController(
         }
     }
 
-    private fun validateExactSplits(form: CreateExpenseForm, bindingResult: BindingResult) {
-        val nonNullEntries = form.exactAmounts.filterValues { it != null }
 
-        if (nonNullEntries.values.any { it != null && it < BigDecimal.ZERO }) {
-            bindingResult.rejectValue("exactAmounts", "error.exactAmounts", "Individual split amounts cannot be negative")
-            return
-        }
-
-        val positiveEntries = nonNullEntries.filterValues { it != null && it > BigDecimal.ZERO }
-        if (positiveEntries.isEmpty()) {
-            bindingResult.rejectValue("exactAmounts", "error.exactAmounts", "At least one participant must be assigned an amount")
-            return
-        }
-
-        val amount = form.amount ?: return
-        if (!bindingResult.hasFieldErrors("amount")) {
-            val totalMinor = amount.toMinorUnits()
-            val sumMinor = positiveEntries.values.filterNotNull().sumOf { it.toMinorUnits() }
-            if (sumMinor != totalMinor) {
-                val formattedSum = sumMinor.toFormattedMoney()
-                val formattedTotal = totalMinor.toFormattedMoney()
-                bindingResult.rejectValue(
-                    "exactAmounts",
-                    "error.exactAmounts",
-                    "The sum of exact split amounts ($formattedSum) must equal the total expense amount ($formattedTotal)"
-                )
-            }
-        }
-    }
 
     private fun populateGroupAndParticipants(model: Model, groupId: Long) {
         val group = groupService.getGroup(groupId)

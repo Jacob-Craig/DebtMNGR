@@ -49,7 +49,8 @@ class TransactionServiceTest {
             transactionRepository = transactionRepository,
             entryRepository = entryRepository,
             categoryRepository = categoryRepository,
-            auditLogRepository = auditLogRepository
+            auditLogRepository = auditLogRepository,
+            objectMapper = tools.jackson.databind.json.JsonMapper.builder().build()
         )
 
         `when`(groupRepository.findById(1L)).thenReturn(Optional.of(group))

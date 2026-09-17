@@ -4,7 +4,7 @@
 
 **Blocked by:** 06: Intra-Group Settlement & Locking
 
-**Status:** claimed
+**Status:** resolved
 
 - [ ] Users can click a Transaction to view its details, including all underlying double-entry `Entry` lines.
 - [ ] If `isLocked = false`, the user can Edit or Delete the transaction.
