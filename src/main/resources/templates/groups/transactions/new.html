@@ -214,6 +214,8 @@
                     <p th:if="${#fields.hasErrors('exactAmounts')}" th:errors="*{exactAmounts}" class="mt-1 text-sm text-red-600">
                         Exact split error
                     </p>
+                    <div id="exactSplitClientError" class="hidden mt-2 p-3 rounded-md bg-red-50 border border-red-200 text-sm text-red-700">
+                    </div>
                 </div>
 
                 <div class="flex justify-end items-center gap-3 pt-4 border-t border-gray-100">
@@ -222,6 +224,7 @@
                         Cancel
                     </a>
                     <button type="submit"
+                            id="recordExpenseSubmitButton"
                             class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                         Record Expense
                     </button>
@@ -232,6 +235,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const form = document.querySelector('form');
             const splitModeEqual = document.getElementById('splitModeEqual');
             const splitModeExact = document.getElementById('splitModeExact');
             const equalSection = document.getElementById('equalSplitSection');
@@ -239,6 +243,7 @@
             const amountInput = document.getElementById('amount');
             const exactInputs = document.querySelectorAll('.exact-amount-input');
             const remainingIndicator = document.getElementById('exactSplitRemaining');
+            const clientErrorEl = document.getElementById('exactSplitClientError');
 
             function updateSplitModeVisibility() {
                 if (splitModeExact && splitModeExact.checked) {
@@ -248,6 +253,7 @@
                 } else {
                     if (equalSection) equalSection.style.display = 'block';
                     if (exactSection) exactSection.style.display = 'none';
+                    if (clientErrorEl) clientErrorEl.classList.add('hidden');
                 }
             }
 
@@ -266,6 +272,7 @@
                 if (Math.abs(diff) < 0.001 && total > 0) {
                     remainingIndicator.textContent = 'Exact match (£' + sum.toFixed(2) + ' / £' + total.toFixed(2) + ')';
                     remainingIndicator.className = 'text-xs font-medium text-green-600';
+                    if (clientErrorEl) clientErrorEl.classList.add('hidden');
                 } else if (diff > 0) {
                     remainingIndicator.textContent = '£' + diff.toFixed(2) + ' remaining of £' + total.toFixed(2);
                     remainingIndicator.className = 'text-xs font-medium text-amber-600';
@@ -276,6 +283,61 @@
                     remainingIndicator.textContent = 'Total: £' + total.toFixed(2);
                     remainingIndicator.className = 'text-xs font-medium text-gray-500';
                 }
+            }
+
+            if (form) {
+                form.addEventListener('submit', function(event) {
+                    if (splitModeExact && splitModeExact.checked) {
+                        const total = parseFloat(amountInput ? amountInput.value : 0) || 0;
+                        let sum = 0;
+                        let hasNegative = false;
+                        let positiveCount = 0;
+
+                        exactInputs.forEach(input => {
+                            const val = parseFloat(input.value);
+                            if (!isNaN(val)) {
+                                if (val < 0) hasNegative = true;
+                                if (val > 0) {
+                                    sum += val;
+                                    positiveCount++;
+                                }
+                            }
+                        });
+
+                        const diff = Math.round((total - sum) * 100) / 100;
+
+                        if (hasNegative) {
+                            event.preventDefault();
+                            if (clientErrorEl) {
+                                clientErrorEl.textContent = 'Individual split amounts cannot be negative.';
+                                clientErrorEl.classList.remove('hidden');
+                            }
+                            return;
+                        }
+
+                        if (positiveCount === 0) {
+                            event.preventDefault();
+                            if (clientErrorEl) {
+                                clientErrorEl.textContent = 'At least one participant must be assigned an amount.';
+                                clientErrorEl.classList.remove('hidden');
+                            }
+                            return;
+                        }
+
+                        if (Math.abs(diff) >= 0.005 || total <= 0) {
+                            event.preventDefault();
+                            if (clientErrorEl) {
+                                clientErrorEl.textContent = 'The sum of exact split amounts (£' + sum.toFixed(2) + ') must equal the total expense amount (£' + total.toFixed(2) + ').';
+                                clientErrorEl.classList.remove('hidden');
+                            }
+                            return;
+                        }
+
+                        if (clientErrorEl) {
+                            clientErrorEl.classList.add('hidden');
+                        }
+                    }
+                });
             }
 
             if (splitModeEqual) splitModeEqual.addEventListener('change', updateSplitModeVisibility);

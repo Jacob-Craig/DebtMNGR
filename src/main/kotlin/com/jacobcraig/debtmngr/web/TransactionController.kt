@@ -113,8 +113,9 @@ class TransactionController(
             return
         }
 
-        if (form.amount != null && !bindingResult.hasFieldErrors("amount")) {
-            val totalMinor = form.amount!!.toMinorUnits()
+        val amount = form.amount ?: return
+        if (!bindingResult.hasFieldErrors("amount")) {
+            val totalMinor = amount.toMinorUnits()
             val sumMinor = positiveEntries.values.filterNotNull().sumOf { it.toMinorUnits() }
             if (sumMinor != totalMinor) {
                 val formattedSum = sumMinor.toFormattedMoney()
