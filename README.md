@@ -51,6 +51,62 @@ From the browser you can:
 
 ---
 
+## Database Management
+
+### Clearing / Resetting the Database
+
+If you want to start with a fresh, empty database:
+
+- **Option A (Container wipe & fresh volume - Recommended):**
+  Stops the database and destroys any persisted volume data, then starts a brand-new PostgreSQL instance:
+  ```bash
+  docker compose down -v
+  docker compose up -d
+  ```
+
+- **Option B (Reset schema without restarting container):**
+  Drops all tables/sequences and recreates the `public` schema in the running container:
+  ```bash
+  docker compose exec -T db psql -U postgres -d debtmngr_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+  ```
+  *(When you next start or run the app, Hibernate's `ddl-auto=update` and the built-in initializers will recreate the tables and default categories automatically).*
+
+---
+
+### Saving & Restoring Database State
+
+#### 1. Save (Backup) Database State
+To export a snapshot of all groups, participants, transactions, entries, and audit logs:
+
+- **Plain SQL Dump:**
+  ```bash
+  docker compose exec -T db pg_dump -U postgres -d debtmngr_db > backup.sql
+  ```
+
+- **Custom Binary Format (Compressed):**
+  ```bash
+  docker compose exec -T db pg_dump -U postgres -Fc -d debtmngr_db > backup.dump
+  ```
+
+#### 2. Restore Database State
+To restore from a previous snapshot:
+
+- **From Plain SQL Dump:**
+  ```bash
+  # Clear existing schema first (recommended to avoid conflict with existing data)
+  docker compose exec -T db psql -U postgres -d debtmngr_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+
+  # Restore data
+  docker compose exec -T db psql -U postgres -d debtmngr_db < backup.sql
+  ```
+
+- **From Custom Binary Archive:**
+  ```bash
+  docker compose exec -T db pg_restore -U postgres -d debtmngr_db --clean --if-exists backup.dump
+  ```
+
+---
+
 ## Testing & Verification
 
 Run the full test suite (unit tests, `@DataJpaTest` repository tests, `@WebMvcTest` controller tests, and end-to-end integration tests):
