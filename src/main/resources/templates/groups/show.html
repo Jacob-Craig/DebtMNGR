@@ -32,9 +32,18 @@
                     <h1 class="text-2xl font-bold text-gray-900" th:text="${group.name}">Group Name</h1>
                     <p class="mt-1 text-sm text-gray-600"
                        th:text="${group.description ?: 'No description provided.'}">Group Description</p>
+                    <div class="text-xs text-gray-400 mt-2">
+                        Created on <span th:text="${#temporals.format(group.createdAt, 'dd MMM yyyy')}">Date</span>
+                    </div>
                 </div>
-                <div class="text-xs text-gray-400">
-                    Created on <span th:text="${#temporals.format(group.createdAt, 'dd MMM yyyy')}">Date</span>
+                <div class="flex items-center gap-3">
+                    <a th:href="@{/groups/{id}/transactions/new(id=${group.id})}"
+                       class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <svg class="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Record Expense
+                    </a>
                 </div>
             </div>
         </div>
@@ -43,7 +52,7 @@
         <div class="bg-white shadow rounded-lg border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                 <div class="flex items-center space-x-2">
-                    <h2 class="text-lg font-semibold text-gray-900">Participant Roster</h2>
+                    <h2 class="text-lg font-semibold text-gray-900">Participant Roster & Balances</h2>
                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800"
                           th:text="${#lists.size(participants)}">0</span>
                 </div>
@@ -58,7 +67,7 @@
                 <p class="mt-1 text-sm text-gray-500">Add group members below to start recording shared expenses.</p>
             </div>
 
-            <!-- Roster Table -->
+            <!-- Roster Table with Balances -->
             <div th:unless="${#lists.isEmpty(participants)}" class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
@@ -68,6 +77,9 @@
                             </th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Role / Identity
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Balance
                             </th>
                             <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Actions
@@ -88,6 +100,13 @@
                                     Participant
                                 </span>
                             </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
+                                <span th:with="bal=${balances[participant.id]}"
+                                      th:text="${bal != null ? bal.formatted : '£0.00'}"
+                                      th:classappend="${bal != null and bal.isPositive ? 'text-green-600' : (bal != null and bal.isNegative ? 'text-red-600' : 'text-gray-500')}">
+                                    £0.00
+                                </span>
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <form th:unless="${participant.isSelf}"
                                       th:action="@{/groups/{id}/participants/{participantId}/self(id=${group.id}, participantId=${participant.id})}"
@@ -100,6 +119,76 @@
                                 <span th:if="${participant.isSelf}" class="text-xs text-gray-400 italic">
                                     Operator
                                 </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Transactions Section -->
+        <div class="bg-white shadow rounded-lg border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <div class="flex items-center space-x-2">
+                    <h2 class="text-lg font-semibold text-gray-900">Recent Transactions</h2>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800"
+                          th:text="${#lists.size(transactions)}">0</span>
+                </div>
+                <div>
+                    <a th:href="@{/groups/{id}/transactions/new(id=${group.id})}"
+                       class="text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline">
+                        + Record Expense
+                    </a>
+                </div>
+            </div>
+
+            <!-- Empty Transactions State -->
+            <div th:if="${#lists.isEmpty(transactions)}" class="text-center py-12 px-4">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2z" />
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No transactions yet</h3>
+                <p class="mt-1 text-sm text-gray-500">Record a shared expense to begin balancing debts in this group.</p>
+                <div class="mt-4">
+                    <a th:href="@{/groups/{id}/transactions/new(id=${group.id})}"
+                       class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
+                        Record Expense
+                    </a>
+                </div>
+            </div>
+
+            <!-- Transactions Table -->
+            <div th:unless="${#lists.isEmpty(transactions)}" class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Description
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Paid By
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Amount
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Date
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <tr th:each="tx : ${transactions}" class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" th:text="${tx.description}">
+                                Dinner
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" th:text="${tx.payer.name}">
+                                Alice
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900" th:text="${tx.formattedAmount}">
+                                £25.00
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500" th:text="${#temporals.format(tx.createdAt, 'dd MMM yyyy')}">
+                                17 Sep 2026
                             </td>
                         </tr>
                     </tbody>
