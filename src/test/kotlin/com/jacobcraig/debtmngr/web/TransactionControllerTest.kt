@@ -50,12 +50,15 @@ class TransactionControllerTest {
 
     @Test
     fun `POST create expense with valid inputs creates expense and redirects`() {
+        val testDate = java.time.LocalDate.of(2026, 9, 17)
+        val expectedInstant = testDate.atStartOfDay(java.time.ZoneOffset.UTC).toInstant()
         val createdTx = Transaction(
             id = 100L,
             group = group,
             description = "Tapas Dinner",
             amount = 4550L,
-            payer = alice
+            payer = alice,
+            createdAt = expectedInstant
         )
         `when`(
             transactionService.createExpense(
@@ -63,7 +66,8 @@ class TransactionControllerTest {
                 payerId = 10L,
                 amount = 4550L,
                 description = "Tapas Dinner",
-                consumerIds = listOf(10L, 20L)
+                consumerIds = listOf(10L, 20L),
+                date = expectedInstant
             )
         ).thenReturn(createdTx)
 
@@ -73,6 +77,7 @@ class TransactionControllerTest {
                 .param("amount", "45.50")
                 .param("payerId", "10")
                 .param("consumerIds", "10", "20")
+                .param("date", "2026-09-17")
         )
             .andExpect(status().is3xxRedirection)
             .andExpect(redirectedUrl("/groups/1"))
@@ -82,7 +87,8 @@ class TransactionControllerTest {
             payerId = 10L,
             amount = 4550L,
             description = "Tapas Dinner",
-            consumerIds = listOf(10L, 20L)
+            consumerIds = listOf(10L, 20L),
+            date = expectedInstant
         )
     }
 
@@ -102,7 +108,7 @@ class TransactionControllerTest {
             .andExpect(view().name("groups/transactions/new"))
             .andExpect(model().attributeHasFieldErrors("expenseForm", "description"))
 
-        verify(transactionService, never()).createExpense(anyLong(), anyLong(), anyLong(), anyString(), anyList())
+        verifyNoInteractions(transactionService)
     }
 
     @Test
@@ -121,7 +127,7 @@ class TransactionControllerTest {
             .andExpect(view().name("groups/transactions/new"))
             .andExpect(model().attributeHasFieldErrors("expenseForm", "amount"))
 
-        verify(transactionService, never()).createExpense(anyLong(), anyLong(), anyLong(), anyString(), anyList())
+        verifyNoInteractions(transactionService)
     }
 
     @Test
@@ -139,7 +145,7 @@ class TransactionControllerTest {
             .andExpect(view().name("groups/transactions/new"))
             .andExpect(model().attributeHasFieldErrors("expenseForm", "payerId"))
 
-        verify(transactionService, never()).createExpense(anyLong(), anyLong(), anyLong(), anyString(), anyList())
+        verifyNoInteractions(transactionService)
     }
 
     @Test
@@ -157,6 +163,6 @@ class TransactionControllerTest {
             .andExpect(view().name("groups/transactions/new"))
             .andExpect(model().attributeHasFieldErrors("expenseForm", "consumerIds"))
 
-        verify(transactionService, never()).createExpense(anyLong(), anyLong(), anyLong(), anyString(), anyList())
+        verifyNoInteractions(transactionService)
     }
 }

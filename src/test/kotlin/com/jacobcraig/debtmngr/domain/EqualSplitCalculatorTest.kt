@@ -92,6 +92,43 @@ class EqualSplitCalculatorTest {
                 consumerIds = emptyList()
             )
         }
-        assertEquals("Consumer list cannot be empty", ex.message)
+        val msg = ex.message
+        assertNotNull(msg)
+        assertEquals("Consumer list cannot be empty", msg)
+    }
+
+    @Test
+    fun `throws exception when consumerIds contains duplicates`() {
+        val ex = assertThrows<IllegalArgumentException> {
+            EqualSplitCalculator.calculate(
+                totalAmount = 1000L,
+                payerId = 1L,
+                consumerIds = listOf(1L, 2L, 1L)
+            )
+        }
+        val msg = ex.message
+        assertNotNull(msg)
+        assertEquals("Consumer IDs must not contain duplicates", msg)
+    }
+
+    @Test
+    fun `total conservation is strictly maintained across various amounts and participant counts`() {
+        val testCases = listOf(
+            Triple(1000L, 1L, listOf(1L, 2L, 3L)),
+            Triple(1003L, 2L, listOf(1L, 2L, 3L, 4L, 5L, 6L, 7L)),
+            Triple(1L, 99L, listOf(1L, 2L, 3L, 4L)),
+            Triple(999999L, 1L, listOf(1L, 2L, 3L, 4L, 5L)),
+            Triple(100L, 5L, (1L..11L).toList())
+        )
+
+        for ((amount, payer, consumers) in testCases) {
+            val splits = EqualSplitCalculator.calculate(
+                totalAmount = amount,
+                payerId = payer,
+                consumerIds = consumers
+            )
+            assertEquals(amount, splits.sumOf { it.amount }, "Total sum must be conserved for amount=$amount, consumers=$consumers")
+            assertEquals(consumers.size, splits.size)
+        }
     }
 }

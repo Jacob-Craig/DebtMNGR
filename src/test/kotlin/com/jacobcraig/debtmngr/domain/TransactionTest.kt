@@ -3,6 +3,8 @@ package com.jacobcraig.debtmngr.domain
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.time.Instant
+import kotlin.test.assertNotNull
 
 class TransactionTest {
 
@@ -121,7 +123,9 @@ class TransactionTest {
         val ex = assertThrows<IllegalStateException> {
             tx.validateDoubleEntry()
         }
-        assertTrue(ex.message!!.contains("Double-entry violation"))
+        val msg = ex.message
+        assertNotNull(msg)
+        assertTrue(msg.contains("Double-entry violation"))
     }
 
     @Test
@@ -145,6 +149,23 @@ class TransactionTest {
         val ex = assertThrows<IllegalStateException> {
             tx.validateDoubleEntry()
         }
-        assertTrue(ex.message!!.contains("Transaction amount"))
+        val msg = ex.message
+        assertNotNull(msg)
+        assertTrue(msg.contains("Transaction amount"))
+    }
+
+    @Test
+    fun `custom createdAt instant can be specified`() {
+        val group = Group(name = "Apartment")
+        val payer = Participant(group = group, name = "Alice")
+        val pastInstant = Instant.parse("2026-01-01T10:00:00Z")
+        val tx = Transaction(
+            group = group,
+            description = "Old expense",
+            amount = 500L,
+            payer = payer,
+            createdAt = pastInstant
+        )
+        assertEquals(pastInstant, tx.createdAt)
     }
 }

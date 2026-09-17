@@ -5,7 +5,9 @@ import jakarta.validation.constraints.Digits
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.NotNull
+import org.springframework.format.annotation.DateTimeFormat
 import java.math.BigDecimal
+import java.time.LocalDate
 
 class CreateExpenseForm(
     @field:NotBlank(message = "Expense description cannot be blank")
@@ -20,5 +22,9 @@ class CreateExpenseForm(
     var payerId: Long? = null,
 
     @field:NotEmpty(message = "At least one consumer must be selected")
-    var consumerIds: List<Long> = emptyList()
+    var consumerIds: List<Long> = emptyList(),
+
+    @field:NotNull(message = "Date is required")
+    @field:DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    var date: LocalDate? = LocalDate.now()
 )

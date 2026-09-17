@@ -83,6 +83,23 @@
                     </p>
                 </div>
 
+                <!-- Date -->
+                <div>
+                    <label for="date" class="block text-sm font-medium text-gray-700">
+                        Date <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1">
+                        <input type="date"
+                               id="date"
+                               th:field="*{date}"
+                               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                               th:classappend="${#fields.hasErrors('date')} ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'" />
+                    </div>
+                    <p th:if="${#fields.hasErrors('date')}" th:errors="*{date}" class="mt-1 text-sm text-red-600">
+                        Date error
+                    </p>
+                </div>
+
                 <!-- Payer Selection -->
                 <div>
                     <label for="payerId" class="block text-sm font-medium text-gray-700">

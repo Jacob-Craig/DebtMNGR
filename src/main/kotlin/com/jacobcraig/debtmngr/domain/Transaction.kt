@@ -59,20 +59,13 @@ class Transaction(
 
     fun totalCredits(): Long = entries.filter { it.type == EntryType.CREDIT }.sumOf { it.amount }
 
-    val formattedAmount: String
-        get() {
-            val major = amount / 100
-            val minor = amount % 100
-            return String.format("£%d.%02d", major, minor)
-        }
-
     fun isBalanced(): Boolean = totalDebits() == totalCredits() && totalCredits() == amount
 
     fun validateDoubleEntry() {
         val debits = totalDebits()
         val credits = totalCredits()
         check(debits == credits) {
-            "Double-entry violation: debits ($debits) must equal credits ($credits)"
+            "Double-entry violation: total debits ($debits) must equal total credits ($credits)"
         }
         check(credits == amount) {
             "Transaction amount ($amount) must equal total credits ($credits)"

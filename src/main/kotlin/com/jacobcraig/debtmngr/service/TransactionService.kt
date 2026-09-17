@@ -8,6 +8,7 @@ import com.jacobcraig.debtmngr.repository.TransactionRepository
 import jakarta.persistence.EntityNotFoundException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 
 @Service
 @Transactional
@@ -18,12 +19,14 @@ class TransactionService(
     private val entryRepository: EntryRepository
 ) {
 
+    @JvmOverloads
     fun createExpense(
         groupId: Long,
         payerId: Long,
         amount: Long,
         description: String,
-        consumerIds: List<Long>
+        consumerIds: List<Long>,
+        date: Instant? = null
     ): Transaction {
         require(description.isNotBlank()) { "Expense description cannot be blank" }
         require(amount > 0) { "Expense amount must be positive" }
@@ -58,7 +61,8 @@ class TransactionService(
             description = description.trim(),
             amount = amount,
             payer = payer,
-            type = TransactionType.EXPENSE
+            type = TransactionType.EXPENSE,
+            createdAt = date ?: Instant.now()
         )
 
         // Payer CREDIT entry for full amount
@@ -84,7 +88,12 @@ class TransactionService(
             }
         }
 
-        // Strictly enforce double-entry invariant
+        // Strictly enforce double-entry invariant and verify debits and credits equal amount
+        val totalDebits = transaction.totalDebits()
+        val totalCredits = transaction.totalCredits()
+        check(totalDebits == amount && totalCredits == amount) {
+            "Total debits ($totalDebits) and credits ($totalCredits) must equal expense amount ($amount)"
+        }
         transaction.validateDoubleEntry()
 
         return transactionRepository.save(transaction)

@@ -130,6 +130,26 @@ class TransactionServiceTest {
     }
 
     @Test
+    fun `createExpense with custom date sets createdAt on transaction`() {
+        val captor = ArgumentCaptor.forClass(Transaction::class.java)
+        `when`(transactionRepository.save(captor.capture())).thenAnswer { it.arguments[0] }
+
+        val customDate = java.time.Instant.parse("2026-05-15T10:30:00Z")
+        val result = transactionService.createExpense(
+            groupId = 1L,
+            payerId = 10L,
+            amount = 1000L,
+            description = "Museum",
+            consumerIds = listOf(10L, 20L),
+            date = customDate
+        )
+
+        assertNotNull(result)
+        val captured = captor.value
+        assertEquals(customDate, captured.createdAt)
+    }
+
+    @Test
     fun `createExpense deduplicates consumerIds list`() {
         val captor = ArgumentCaptor.forClass(Transaction::class.java)
         `when`(transactionRepository.save(captor.capture())).thenAnswer { it.arguments[0] }
