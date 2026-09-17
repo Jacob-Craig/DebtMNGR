@@ -1,9 +1,9 @@
 package com.jacobcraig.debtmngr.web
 
+import com.jacobcraig.debtmngr.domain.SplitMode
 import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.Digits
 import jakarta.validation.constraints.NotBlank
-import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.NotNull
 import org.springframework.format.annotation.DateTimeFormat
 import java.math.BigDecimal
@@ -21,10 +21,13 @@ class CreateExpenseForm(
     @field:NotNull(message = "Payer must be selected")
     var payerId: Long? = null,
 
-    @field:NotEmpty(message = "At least one consumer must be selected")
     var consumerIds: List<Long> = emptyList(),
 
     @field:NotNull(message = "Date is required")
     @field:DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-    var date: LocalDate? = LocalDate.now()
+    var date: LocalDate? = LocalDate.now(),
+
+    var splitMode: SplitMode = SplitMode.EQUAL,
+
+    var exactAmounts: MutableMap<Long, BigDecimal?> = mutableMapOf()
 )

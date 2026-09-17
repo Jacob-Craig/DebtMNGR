@@ -25,12 +25,13 @@ class TransactionService(
         payerId: Long,
         amount: Long,
         description: String,
-        consumerIds: List<Long>,
-        date: Instant? = null
+        consumerIds: List<Long> = emptyList(),
+        date: Instant? = null,
+        splitMode: SplitMode = SplitMode.EQUAL,
+        exactAmounts: Map<Long, Long> = emptyMap()
     ): Transaction {
         require(description.isNotBlank()) { "Expense description cannot be blank" }
         require(amount > 0) { "Expense amount must be positive" }
-        require(consumerIds.isNotEmpty()) { "At least one consumer must be selected" }
 
         val group = groupRepository.findById(groupId)
             .orElseThrow { EntityNotFoundException("Group not found with id: $groupId") }
@@ -40,21 +41,38 @@ class TransactionService(
 
         require(payer.group.id == groupId) { "Payer does not belong to group $groupId" }
 
-        val distinctConsumerIds = consumerIds.distinct()
-        val consumers = distinctConsumerIds.map { consumerId ->
-            val consumer = participantRepository.findById(consumerId)
-                .orElseThrow { EntityNotFoundException("Participant not found with id: $consumerId") }
-            require(consumer.group.id == groupId) { "Consumer $consumerId does not belong to group $groupId" }
-            consumer
+        val (shares, participantMap) = when (splitMode) {
+            SplitMode.EQUAL -> {
+                require(consumerIds.isNotEmpty()) { "At least one consumer must be selected" }
+                val distinctConsumerIds = consumerIds.distinct()
+                val consumers = distinctConsumerIds.map { consumerId ->
+                    val consumer = participantRepository.findById(consumerId)
+                        .orElseThrow { EntityNotFoundException("Participant not found with id: $consumerId") }
+                    require(consumer.group.id == groupId) { "Consumer $consumerId does not belong to group $groupId" }
+                    consumer
+                }
+                val shares = EqualSplitCalculator.calculate(
+                    totalAmount = amount,
+                    payerId = payerId,
+                    consumerIds = distinctConsumerIds
+                )
+                shares to consumers.associateBy { checkNotNull(it.id) }
+            }
+            SplitMode.EXACT -> {
+                require(exactAmounts.isNotEmpty()) { "At least one consumer must be assigned an amount" }
+                val participants = exactAmounts.keys.map { participantId ->
+                    val participant = participantRepository.findById(participantId)
+                        .orElseThrow { EntityNotFoundException("Participant not found with id: $participantId") }
+                    require(participant.group.id == groupId) { "Participant $participantId does not belong to group $groupId" }
+                    participant
+                }
+                val shares = ExactSplitCalculator.calculate(
+                    totalAmount = amount,
+                    exactAmounts = exactAmounts
+                )
+                shares to participants.associateBy { checkNotNull(it.id) }
+            }
         }
-
-        val consumerMap = consumers.associateBy { checkNotNull(it.id) }
-
-        val shares = EqualSplitCalculator.calculate(
-            totalAmount = amount,
-            payerId = payerId,
-            consumerIds = distinctConsumerIds
-        )
 
         val transaction = Transaction(
             group = group,
@@ -77,7 +95,7 @@ class TransactionService(
         // Consumer DEBIT entries for each share
         for (share in shares) {
             if (share.amount > 0) {
-                val consumer = consumerMap.getValue(share.participantId)
+                val consumer = participantMap.getValue(share.participantId)
                 val debitEntry = Entry(
                     transaction = transaction,
                     account = consumer.account,
