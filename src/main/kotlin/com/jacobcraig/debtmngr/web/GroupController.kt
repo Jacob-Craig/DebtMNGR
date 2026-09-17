@@ -35,10 +35,7 @@ class GroupController(private val groupService: GroupService) {
 
     @GetMapping("/{id}")
     fun showGroup(@PathVariable("id") id: Long, model: Model): String {
-        val group = groupService.getGroup(id)
-        val participants = groupService.getParticipants(id)
-        model.addAttribute("group", group)
-        model.addAttribute("participants", participants)
+        populateGroupAndParticipants(model, id)
         if (!model.containsAttribute("participantForm")) {
             model.addAttribute("participantForm", AddParticipantForm())
         }
@@ -53,14 +50,18 @@ class GroupController(private val groupService: GroupService) {
         model: Model
     ): String {
         if (bindingResult.hasErrors()) {
-            val group = groupService.getGroup(id)
-            val participants = groupService.getParticipants(id)
-            model.addAttribute("group", group)
-            model.addAttribute("participants", participants)
+            populateGroupAndParticipants(model, id)
             return "groups/show"
         }
         groupService.addParticipant(id, form.name, form.isSelf)
         return "redirect:/groups/$id"
+    }
+
+    private fun populateGroupAndParticipants(model: Model, groupId: Long) {
+        val group = groupService.getGroup(groupId)
+        val participants = groupService.getParticipants(groupId)
+        model.addAttribute("group", group)
+        model.addAttribute("participants", participants)
     }
 
     @PostMapping("/{id}/participants/{participantId}/self")

@@ -107,17 +107,17 @@ class GroupServiceTest {
             Participant(id = 1L, group = group, name = "Alice"),
             Participant(id = 2L, group = group, name = "Bob")
         )
-        `when`(participantRepository.findByGroupId(1L)).thenReturn(participants)
+        `when`(participantRepository.findByGroupIdOrderByIdAsc(1L)).thenReturn(participants)
 
         val result = groupService.getParticipants(1L)
 
         assertEquals(2, result.size)
         assertEquals(participants, result)
-        verify(participantRepository).findByGroupId(1L)
+        verify(participantRepository).findByGroupIdOrderByIdAsc(1L)
     }
 
     @Test
-    fun `addParticipant with valid name creates and returns participant`() {
+    fun `addParticipant with valid name creates and returns participant and adds to group`() {
         val group = Group(id = 1L, name = "Apartment")
         `when`(groupRepository.findById(1L)).thenReturn(Optional.of(group))
 
@@ -133,6 +133,7 @@ class GroupServiceTest {
         assertFalse(captured.isSelf)
         assertEquals(group, captured.group)
         assertNotNull(captured.account)
+        assertTrue(group.participants.contains(savedParticipant))
     }
 
     @Test
@@ -150,7 +151,7 @@ class GroupServiceTest {
         `when`(groupRepository.findById(1L)).thenReturn(Optional.of(group))
 
         val existingSelf = Participant(id = 5L, group = group, name = "Alice", isSelf = true)
-        `when`(participantRepository.findByGroupIdAndIsSelfTrue(1L)).thenReturn(existingSelf)
+        `when`(participantRepository.findByGroupIdOrderByIdAsc(1L)).thenReturn(listOf(existingSelf))
 
         val newParticipant = Participant(id = 6L, group = group, name = "Bob", isSelf = true)
         `when`(participantRepository.save(any(Participant::class.java))).thenAnswer { it.arguments[0] }
@@ -161,6 +162,7 @@ class GroupServiceTest {
         assertFalse(existingSelf.isSelf)
         verify(participantRepository).save(existingSelf)
         verify(participantRepository).save(result)
+        assertTrue(group.participants.contains(result))
     }
 
     @Test
@@ -172,7 +174,7 @@ class GroupServiceTest {
         val target = Participant(id = 6L, group = group, name = "Bob", isSelf = false)
 
         `when`(participantRepository.findById(6L)).thenReturn(Optional.of(target))
-        `when`(participantRepository.findByGroupIdAndIsSelfTrue(1L)).thenReturn(existingSelf)
+        `when`(participantRepository.findByGroupIdOrderByIdAsc(1L)).thenReturn(listOf(existingSelf, target))
         `when`(participantRepository.save(any(Participant::class.java))).thenAnswer { it.arguments[0] }
 
         val result = groupService.designateSelf(1L, 6L)

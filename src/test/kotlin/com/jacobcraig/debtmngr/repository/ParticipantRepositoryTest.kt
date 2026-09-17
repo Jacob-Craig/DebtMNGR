@@ -41,7 +41,7 @@ class ParticipantRepositoryTest @Autowired constructor(
     }
 
     @Test
-    fun `findByGroupId returns participants for the given group only`() {
+    fun `findByGroupIdOrderByIdAsc returns participants for the given group in ascending order`() {
         val group1 = groupRepository.save(Group(name = "Group 1"))
         val group2 = groupRepository.save(Group(name = "Group 2"))
 
@@ -52,10 +52,11 @@ class ParticipantRepositoryTest @Autowired constructor(
         entityManager.flush()
         entityManager.clear()
 
-        val group1Participants = participantRepository.findByGroupId(group1.id!!)
+        val group1Id = checkNotNull(group1.id) { "Group 1 id must not be null" }
+        val group1Participants = participantRepository.findByGroupIdOrderByIdAsc(group1Id)
         assertEquals(2, group1Participants.size)
-        assertTrue(group1Participants.any { it.name == "Alice" })
-        assertTrue(group1Participants.any { it.name == "Bob" })
+        assertEquals(listOf("Alice", "Bob"), group1Participants.map { it.name })
+        assertEquals(listOf(checkNotNull(p1.id), checkNotNull(p2.id)), group1Participants.map { it.id })
         assertFalse(group1Participants.any { it.name == "Charlie" })
     }
 
@@ -69,10 +70,12 @@ class ParticipantRepositoryTest @Autowired constructor(
         entityManager.flush()
         entityManager.clear()
 
-        val selfParticipant = participantRepository.findByGroupIdAndIsSelfTrue(group.id!!)
+        val groupId = checkNotNull(group.id) { "Group id must not be null" }
+        val selfParticipant = participantRepository.findByGroupIdAndIsSelfTrue(groupId)
         assertNotNull(selfParticipant)
-        assertEquals("Bob", selfParticipant?.name)
-        assertTrue(selfParticipant!!.isSelf)
+        val participant = checkNotNull(selfParticipant) { "Participant must not be null" }
+        assertEquals("Bob", participant.name)
+        assertTrue(participant.isSelf)
     }
 
     @Test
@@ -84,7 +87,8 @@ class ParticipantRepositoryTest @Autowired constructor(
         entityManager.flush()
         entityManager.clear()
 
-        val selfParticipant = participantRepository.findByGroupIdAndIsSelfTrue(group.id!!)
+        val groupId = checkNotNull(group.id) { "Group id must not be null" }
+        val selfParticipant = participantRepository.findByGroupIdAndIsSelfTrue(groupId)
         assertNull(selfParticipant)
     }
 }

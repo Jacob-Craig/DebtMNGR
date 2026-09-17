@@ -6,6 +6,6 @@ import org.springframework.stereotype.Repository
 
 @Repository
 interface ParticipantRepository : JpaRepository<Participant, Long> {
-    fun findByGroupId(groupId: Long): List<Participant>
+    fun findByGroupIdOrderByIdAsc(groupId: Long): List<Participant>
     fun findByGroupIdAndIsSelfTrue(groupId: Long): Participant?
 }

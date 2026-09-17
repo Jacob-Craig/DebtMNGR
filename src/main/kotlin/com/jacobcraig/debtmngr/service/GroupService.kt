@@ -37,7 +37,7 @@ class GroupService(
 
     @Transactional(readOnly = true)
     fun getParticipants(groupId: Long): List<Participant> {
-        return participantRepository.findByGroupId(groupId)
+        return participantRepository.findByGroupIdOrderByIdAsc(groupId)
     }
 
     fun addParticipant(groupId: Long, name: String, isSelf: Boolean = false): Participant {
@@ -45,11 +45,7 @@ class GroupService(
         val group = getGroup(groupId)
 
         if (isSelf) {
-            val existingSelf = participantRepository.findByGroupIdAndIsSelfTrue(groupId)
-            if (existingSelf != null) {
-                existingSelf.isSelf = false
-                participantRepository.save(existingSelf)
-            }
+            clearExistingSelf(groupId)
         }
 
         val participant = Participant(
@@ -57,7 +53,11 @@ class GroupService(
             name = name.trim(),
             isSelf = isSelf
         )
-        return participantRepository.save(participant)
+        val saved = participantRepository.save(participant)
+        if (!group.participants.contains(saved)) {
+            group.participants.add(saved)
+        }
+        return saved
     }
 
     fun designateSelf(groupId: Long, participantId: Long): Participant {
@@ -67,13 +67,18 @@ class GroupService(
 
         require(participant.group.id == groupId) { "Participant $participantId does not belong to group $groupId" }
 
-        val existingSelf = participantRepository.findByGroupIdAndIsSelfTrue(groupId)
-        if (existingSelf != null && existingSelf.id != participantId) {
-            existingSelf.isSelf = false
-            participantRepository.save(existingSelf)
-        }
+        clearExistingSelf(groupId, participantId)
 
         participant.isSelf = true
         return participantRepository.save(participant)
+    }
+
+    private fun clearExistingSelf(groupId: Long, excludeParticipantId: Long? = null) {
+        val existingSelfList = participantRepository.findByGroupIdOrderByIdAsc(groupId)
+            .filter { it.isSelf && it.id != excludeParticipantId }
+        for (existingSelf in existingSelfList) {
+            existingSelf.isSelf = false
+            participantRepository.save(existingSelf)
+        }
     }
 }

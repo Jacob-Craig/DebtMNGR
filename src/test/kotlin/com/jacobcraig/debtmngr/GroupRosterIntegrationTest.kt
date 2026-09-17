@@ -64,14 +64,14 @@ class GroupRosterIntegrationTest {
             .andExpect(redirectedUrl("/groups/$groupId"))
 
         // Verify Alice in DB and Cascade-created Account
-        val participantsAfterFirst = participantRepository.findByGroupId(groupId)
+        val participantsAfterFirst = participantRepository.findByGroupIdOrderByIdAsc(groupId)
         assertEquals(1, participantsAfterFirst.size)
         val alice = participantsAfterFirst[0]
         assertEquals("Alice", alice.name)
         assertTrue(alice.isSelf)
         assertNotNull(alice.account)
-        assertNotNull(alice.account.id)
-        assertTrue(accountRepository.findById(alice.account.id!!).isPresent)
+        val aliceAccountId = checkNotNull(alice.account.id) { "Alice account id must not be null" }
+        assertTrue(accountRepository.findById(aliceAccountId).isPresent)
 
         // 3. Add a second participant (Bob) without isSelf
         mockMvc.perform(
@@ -83,7 +83,7 @@ class GroupRosterIntegrationTest {
             .andExpect(redirectedUrl("/groups/$groupId"))
 
         // 4. The roster displays all added Participants
-        val participantsAfterSecond = participantRepository.findByGroupId(groupId)
+        val participantsAfterSecond = participantRepository.findByGroupIdOrderByIdAsc(groupId)
         assertEquals(2, participantsAfterSecond.size)
         val bob = participantsAfterSecond.first { it.name == "Bob" }
         assertFalse(bob.isSelf)
@@ -102,13 +102,15 @@ class GroupRosterIntegrationTest {
             .andExpect(redirectedUrl("/groups/$groupId"))
 
         // Verify Bob is now self and Alice is not
-        val refreshedAlice = participantRepository.findById(alice.id!!).get()
-        val refreshedBob = participantRepository.findById(bob.id!!).get()
+        val aliceId = checkNotNull(alice.id) { "Alice id must not be null" }
+        val bobId = checkNotNull(bob.id) { "Bob id must not be null" }
+        val refreshedAlice = participantRepository.findById(aliceId).get()
+        val refreshedBob = participantRepository.findById(bobId).get()
         assertFalse(refreshedAlice.isSelf)
         assertTrue(refreshedBob.isSelf)
 
         // Exactly one participant is self
-        val selfParticipants = participantRepository.findByGroupId(groupId).filter { it.isSelf }
+        val selfParticipants = participantRepository.findByGroupIdOrderByIdAsc(groupId).filter { it.isSelf }
         assertEquals(1, selfParticipants.size)
         assertEquals("Bob", selfParticipants[0].name)
 
