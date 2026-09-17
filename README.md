@@ -4,6 +4,8 @@ A minimalist, double-entry bookkeeping debt manager application for tracking and
 
 This served as a multi-agent test project utilising the antigravity CLI. It demonstrates agentic capabilities by explicitly following Matt Pocock's workflow stages: `grill-with-docs`, `to-spec`, `to-tickets`, `implement`, and `code-review`.
 
+![sample app UI showing group list](sampleImage.png)
+
 
 ## Tech Stack
 - **Language:** Kotlin 2.x (JVM 17)
