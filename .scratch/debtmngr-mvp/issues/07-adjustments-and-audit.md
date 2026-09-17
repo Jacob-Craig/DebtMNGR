@@ -6,8 +6,8 @@
 
 **Status:** resolved
 
-- [ ] Users can click a Transaction to view its details, including all underlying double-entry `Entry` lines.
-- [ ] If `isLocked = false`, the user can Edit or Delete the transaction.
-- [ ] Editing/Deleting an unlocked transaction soft-deletes the old record and creates an `AuditLog` entry preserving the history.
-- [ ] If `isLocked = true`, Edit/Delete is disabled. The user is offered an "Adjust" button.
-- [ ] Adjusting a locked transaction creates a new `ADJUSTMENT` transaction containing the delta amounts, which links to the original.
+- [x] Users can click a Transaction to view its details, including all underlying double-entry `Entry` lines.
+- [x] If `isLocked = false`, the user can Edit or Delete the transaction.
+- [x] Editing/Deleting an unlocked transaction soft-deletes the old record and creates an `AuditLog` entry preserving the history.
+- [x] If `isLocked = true`, Edit/Delete is disabled. The user is offered an "Adjust" button.
+- [x] Adjusting a locked transaction creates a new `ADJUSTMENT` transaction containing the delta amounts, which links to the original.
