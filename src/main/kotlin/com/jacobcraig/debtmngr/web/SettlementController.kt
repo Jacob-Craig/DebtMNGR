@@ -35,7 +35,7 @@ class SettlementController(
             val participants = groupService.getParticipants(groupId)
             val self = participants.find { it.isSelf }
             val rawBalances = transactionService.getParticipantBalances(groupId)
-            if (self != null && self.id != null) {
+            if (self?.id != null) {
                 val selfBalance = rawBalances[self.id] ?: 0L
                 if (selfBalance < 0) {
                     form.payerId = self.id
