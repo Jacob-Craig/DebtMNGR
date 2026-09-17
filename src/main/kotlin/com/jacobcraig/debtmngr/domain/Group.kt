@@ -17,5 +17,9 @@ class Group(
     var description: String? = null,
 
     @Column(nullable = false, updatable = false)
-    val createdAt: Instant = Instant.now()
+    val createdAt: Instant = Instant.now(),
+
+    @OneToMany(mappedBy = "group", cascade = [CascadeType.ALL], orphanRemoval = true)
+    @OrderBy("id ASC")
+    val participants: MutableList<Participant> = mutableListOf()
 )
