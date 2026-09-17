@@ -428,4 +428,27 @@ class TransactionControllerTest {
             categoryId = 99L
         )
     }
+
+    @Test
+    fun `POST create expense with custom category choice but blank customCategoryName returns form with error`() {
+        `when`(groupService.getGroup(1L)).thenReturn(group)
+        `when`(groupService.getParticipants(1L)).thenReturn(listOf(alice, bob))
+        `when`(categoryService.getCategoriesForGroup(1L)).thenReturn(listOf(groceriesCat))
+
+        mockMvc.perform(
+            post("/groups/1/transactions")
+                .param("description", "Ski pass and poles")
+                .param("amount", "80.00")
+                .param("payerId", "10")
+                .param("consumerIds", "10", "20")
+                .param("date", "2026-09-17")
+                .param("categoryId", "-1")
+                .param("customCategoryName", "   ")
+        )
+            .andExpect(status().isOk)
+            .andExpect(view().name("groups/transactions/new"))
+            .andExpect(model().attributeHasFieldErrors("expenseForm", "customCategoryName"))
+
+        verifyNoInteractions(transactionService)
+    }
 }

@@ -70,7 +70,7 @@ class TransactionService(
         val category = categoryId?.let { catId ->
             val cat = categoryRepository.findById(catId)
                 .orElseThrow { EntityNotFoundException("Category not found with id: $catId") }
-            require(cat.isSystem || cat.group?.id == groupId) {
+            require(cat.isAvailableIn(group)) {
                 "Category ${cat.name} does not belong to group $groupId"
             }
             cat

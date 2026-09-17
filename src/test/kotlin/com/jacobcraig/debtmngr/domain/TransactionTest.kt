@@ -217,6 +217,7 @@ class TransactionTest {
                 category = categoryGroup2
             )
         }
-        assertTrue(ex.message!!.contains("does not belong to group"))
+        val msg = checkNotNull(ex.message)
+        assertTrue(msg.contains("does not belong to group"))
     }
 }

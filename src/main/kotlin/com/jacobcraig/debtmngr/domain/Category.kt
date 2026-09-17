@@ -36,4 +36,7 @@ class Category(
 
     val isSystem: Boolean
         get() = group == null
+
+    fun isAvailableIn(targetGroup: Group): Boolean =
+        isSystem || group == targetGroup || (group?.id != null && group?.id == targetGroup.id)
 }

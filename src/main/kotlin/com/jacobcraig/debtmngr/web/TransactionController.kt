@@ -54,6 +54,12 @@ class TransactionController(
             validateExactSplits(form, bindingResult)
         }
 
+        val customName = form.customCategoryName?.trim()
+        val selectedCatId = form.categoryId
+        if (selectedCatId == -1L && customName.isNullOrEmpty()) {
+            bindingResult.rejectValue("customCategoryName", "NotBlank", "Custom category name cannot be blank")
+        }
+
         if (bindingResult.hasErrors()) {
             populateGroupAndParticipants(model, groupId)
             return "groups/transactions/new"
@@ -66,11 +72,11 @@ class TransactionController(
             val dateInstant = form.date?.atStartOfDay(ZoneOffset.UTC)?.toInstant()
 
             val resolvedCategoryId = when {
-                !form.customCategoryName.isNullOrBlank() -> {
-                    val created = categoryService.createCustomCategory(groupId, form.customCategoryName!!.trim())
+                !customName.isNullOrEmpty() -> {
+                    val created = categoryService.createCustomCategory(groupId, customName)
                     created.id
                 }
-                form.categoryId != null && form.categoryId!! > 0 -> form.categoryId
+                selectedCatId != null && selectedCatId > 0 -> selectedCatId
                 else -> null
             }
 

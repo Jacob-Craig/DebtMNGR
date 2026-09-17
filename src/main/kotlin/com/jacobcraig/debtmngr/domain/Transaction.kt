@@ -53,7 +53,7 @@ class Transaction(
         require(description.isNotBlank()) { "Transaction description cannot be blank" }
         require(amount > 0) { "Transaction amount must be positive" }
         category?.let { cat ->
-            require(cat.isSystem || cat.group == group || (cat.group?.id != null && cat.group?.id == group.id)) {
+            require(cat.isAvailableIn(group)) {
                 "Category ${cat.name} does not belong to group ${group.id ?: group.name}"
             }
         }

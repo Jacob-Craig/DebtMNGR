@@ -70,11 +70,6 @@ class CategoryService(
             return existingGroupCategory
         }
 
-        val existingSystemCategory = categoryRepository.findByGroupIsNullAndNameIgnoreCase(trimmedName)
-        if (existingSystemCategory != null) {
-            return existingSystemCategory
-        }
-
         val category = Category(
             name = trimmedName,
             group = group,

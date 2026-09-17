@@ -104,15 +104,16 @@ class CategoryServiceTest {
     }
 
     @Test
-    fun `createCustomCategory with existing system category returns system category`() {
-        val existingSystem = Category(id = 1L, name = "Groceries", systemKey = "GROCERIES")
+    fun `createCustomCategory saves custom category for group even if a system category shares the name`() {
+        val saved = Category(id = 11L, name = "Groceries", group = group)
         `when`(categoryRepository.findByGroupIdAndNameIgnoreCase(1L, "Groceries")).thenReturn(null)
-        `when`(categoryRepository.findByGroupIsNullAndNameIgnoreCase("Groceries")).thenReturn(existingSystem)
+        `when`(categoryRepository.save(any(Category::class.java))).thenReturn(saved)
 
         val result = categoryService.createCustomCategory(1L, "Groceries")
 
-        assertEquals(existingSystem, result)
-        verify(categoryRepository, never()).save(any(Category::class.java))
+        assertEquals(saved, result)
+        assertEquals(group, result.group)
+        verify(categoryRepository).save(any(Category::class.java))
     }
 
     @Test
