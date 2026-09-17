@@ -1,6 +1,7 @@
 package com.jacobcraig.debtmngr.service
 
 import com.jacobcraig.debtmngr.domain.*
+import com.jacobcraig.debtmngr.repository.CategoryRepository
 import com.jacobcraig.debtmngr.repository.EntryRepository
 import com.jacobcraig.debtmngr.repository.GroupRepository
 import com.jacobcraig.debtmngr.repository.ParticipantRepository
@@ -20,6 +21,7 @@ class TransactionServiceTest {
     private lateinit var participantRepository: ParticipantRepository
     private lateinit var transactionRepository: TransactionRepository
     private lateinit var entryRepository: EntryRepository
+    private lateinit var categoryRepository: CategoryRepository
     private lateinit var transactionService: TransactionService
 
     private val group = Group(id = 1L, name = "Apartment")
@@ -36,12 +38,14 @@ class TransactionServiceTest {
         participantRepository = mock(ParticipantRepository::class.java)
         transactionRepository = mock(TransactionRepository::class.java)
         entryRepository = mock(EntryRepository::class.java)
+        categoryRepository = mock(CategoryRepository::class.java)
 
         transactionService = TransactionService(
             groupRepository = groupRepository,
             participantRepository = participantRepository,
             transactionRepository = transactionRepository,
-            entryRepository = entryRepository
+            entryRepository = entryRepository,
+            categoryRepository = categoryRepository
         )
 
         `when`(groupRepository.findById(1L)).thenReturn(Optional.of(group))
@@ -430,6 +434,101 @@ class TransactionServiceTest {
             transactionService.getTransactionsForGroup(99L)
         }
         assertEquals("Group not found with id: 99", ex.message)
+    }
+
+    @Test
+    fun `createExpense with valid system categoryId sets category on transaction`() {
+        val sysCat = Category(id = 50L, name = "Groceries", systemKey = "GROCERIES")
+        `when`(categoryRepository.findById(50L)).thenReturn(Optional.of(sysCat))
+
+        val captor = ArgumentCaptor.forClass(Transaction::class.java)
+        `when`(transactionRepository.save(captor.capture())).thenAnswer { it.arguments[0] }
+
+        val result = transactionService.createExpense(
+            groupId = 1L,
+            payerId = 10L,
+            amount = 1000L,
+            description = "Groceries run",
+            consumerIds = listOf(10L, 20L),
+            categoryId = 50L
+        )
+
+        assertNotNull(result)
+        val captured = captor.value
+        assertSame(sysCat, captured.category)
+    }
+
+    @Test
+    fun `createExpense with valid group custom categoryId sets category on transaction`() {
+        val customCat = Category(id = 60L, name = "Cleaning", group = group)
+        `when`(categoryRepository.findById(60L)).thenReturn(Optional.of(customCat))
+
+        val captor = ArgumentCaptor.forClass(Transaction::class.java)
+        `when`(transactionRepository.save(captor.capture())).thenAnswer { it.arguments[0] }
+
+        val result = transactionService.createExpense(
+            groupId = 1L,
+            payerId = 10L,
+            amount = 1000L,
+            description = "Cleaning supplies",
+            consumerIds = listOf(10L, 20L),
+            categoryId = 60L
+        )
+
+        assertNotNull(result)
+        val captured = captor.value
+        assertSame(customCat, captured.category)
+    }
+
+    @Test
+    fun `createExpense with categoryId from different group throws IllegalArgumentException`() {
+        val otherGroup = Group(id = 2L, name = "Other")
+        val otherCat = Category(id = 70L, name = "Other Group Cat", group = otherGroup)
+        `when`(categoryRepository.findById(70L)).thenReturn(Optional.of(otherCat))
+
+        val ex = assertThrows<IllegalArgumentException> {
+            transactionService.createExpense(
+                groupId = 1L,
+                payerId = 10L,
+                amount = 1000L,
+                description = "Supplies",
+                consumerIds = listOf(10L, 20L),
+                categoryId = 70L
+            )
+        }
+        assertTrue(checkNotNull(ex.message).contains("does not belong to group 1"))
+        verify(transactionRepository, never()).save(any())
+    }
+
+    @Test
+    fun `createExpense with nonexistent categoryId throws EntityNotFoundException`() {
+        `when`(categoryRepository.findById(99L)).thenReturn(Optional.empty())
+
+        val ex = assertThrows<EntityNotFoundException> {
+            transactionService.createExpense(
+                groupId = 1L,
+                payerId = 10L,
+                amount = 1000L,
+                description = "Supplies",
+                consumerIds = listOf(10L, 20L),
+                categoryId = 99L
+            )
+        }
+        assertEquals("Category not found with id: 99", ex.message)
+        verify(transactionRepository, never()).save(any())
+    }
+
+    @Test
+    fun `getTransactionsForGroup with categoryId filters by category`() {
+        val tx1 = Transaction(id = 1L, group = group, description = "Groceries", amount = 1000L, payer = alice)
+        `when`(transactionRepository.findByGroupIdAndCategoryIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc(1L, 50L))
+            .thenReturn(listOf(tx1))
+
+        val result = transactionService.getTransactionsForGroup(1L, categoryId = 50L)
+
+        assertEquals(1, result.size)
+        assertEquals(tx1, result[0])
+        verify(transactionRepository).findByGroupIdAndCategoryIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc(1L, 50L)
     }
 
     @Test

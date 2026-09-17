@@ -1,7 +1,9 @@
 package com.jacobcraig.debtmngr.web
 
+import com.jacobcraig.debtmngr.domain.Category
 import com.jacobcraig.debtmngr.domain.Group
 import com.jacobcraig.debtmngr.domain.Participant
+import com.jacobcraig.debtmngr.service.CategoryService
 import com.jacobcraig.debtmngr.service.GroupService
 import com.jacobcraig.debtmngr.service.TransactionService
 import org.hamcrest.Matchers.containsString
@@ -26,6 +28,9 @@ class GroupControllerTest {
 
     @MockitoBean
     private lateinit var transactionService: TransactionService
+
+    @MockitoBean
+    private lateinit var categoryService: CategoryService
 
     @Test
     fun `GET new group form displays form view`() {
@@ -75,16 +80,20 @@ class GroupControllerTest {
             Participant(id = 10L, group = group, name = "Alice", isSelf = true),
             Participant(id = 11L, group = group, name = "Bob", isSelf = false)
         )
+        val categories = listOf(Category(id = 50L, name = "Groceries", systemKey = "GROCERIES"))
         `when`(groupService.getGroup(1L)).thenReturn(group)
         `when`(groupService.getParticipants(1L)).thenReturn(participants)
         `when`(transactionService.getParticipantBalances(1L)).thenReturn(mapOf(10L to 1500L, 11L to -1500L))
-        `when`(transactionService.getTransactionsForGroup(1L)).thenReturn(emptyList())
+        `when`(transactionService.getTransactionsForGroup(1L, null)).thenReturn(emptyList())
+        `when`(categoryService.getCategoriesForGroup(1L)).thenReturn(categories)
 
         mockMvc.perform(get("/groups/1"))
             .andExpect(status().isOk)
             .andExpect(view().name("groups/show"))
             .andExpect(model().attribute("group", group))
             .andExpect(model().attribute("participants", participants))
+            .andExpect(model().attribute("categories", categories))
+            .andExpect(model().attributeDoesNotExist("selectedCategoryId"))
             .andExpect(model().attributeExists("balances"))
             .andExpect(model().attributeExists("transactions"))
             .andExpect(model().attributeExists("participantForm"))
@@ -92,6 +101,25 @@ class GroupControllerTest {
             .andExpect(content().string(containsString("Recent Transactions")))
             .andExpect(content().string(containsString("+£15.00")))
             .andExpect(content().string(containsString("-£15.00")))
+    }
+
+    @Test
+    fun `GET group detail with categoryId parameter filters transactions and sets selectedCategoryId`() {
+        val group = Group(id = 1L, name = "Trip to Spain")
+        val categories = listOf(Category(id = 50L, name = "Groceries", systemKey = "GROCERIES"))
+        `when`(groupService.getGroup(1L)).thenReturn(group)
+        `when`(groupService.getParticipants(1L)).thenReturn(emptyList())
+        `when`(transactionService.getParticipantBalances(1L)).thenReturn(emptyMap())
+        `when`(transactionService.getTransactionsForGroup(1L, 50L)).thenReturn(emptyList())
+        `when`(categoryService.getCategoriesForGroup(1L)).thenReturn(categories)
+
+        mockMvc.perform(get("/groups/1").param("categoryId", "50"))
+            .andExpect(status().isOk)
+            .andExpect(view().name("groups/show"))
+            .andExpect(model().attribute("selectedCategoryId", 50L))
+            .andExpect(model().attribute("categories", categories))
+
+        verify(transactionService).getTransactionsForGroup(1L, 50L)
     }
 
     @Test

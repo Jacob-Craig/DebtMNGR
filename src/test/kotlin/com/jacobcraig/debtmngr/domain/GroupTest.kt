@@ -33,4 +33,15 @@ class GroupTest {
         assertEquals(1, group.participants.size)
         assertSame(participant, group.participants[0])
     }
+
+    @Test
+    fun `can add categories to group`() {
+        val group = Group(name = "Trip to Spain")
+        assertTrue(group.categories.isEmpty())
+        val category = Category(name = "Museums", group = group)
+        group.categories.add(category)
+
+        assertEquals(1, group.categories.size)
+        assertSame(category, group.categories[0])
+    }
 }

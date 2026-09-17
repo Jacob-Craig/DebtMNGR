@@ -29,5 +29,9 @@ class CreateExpenseForm(
 
     var splitMode: SplitMode = SplitMode.EQUAL,
 
-    var exactAmounts: MutableMap<Long, BigDecimal?> = mutableMapOf()
+    var exactAmounts: MutableMap<Long, BigDecimal?> = mutableMapOf(),
+
+    var categoryId: Long? = null,
+
+    var customCategoryName: String? = null
 )

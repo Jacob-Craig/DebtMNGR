@@ -7,6 +7,12 @@ import org.springframework.stereotype.Repository
 
 @Repository
 interface TransactionRepository : JpaRepository<Transaction, Long> {
-    @EntityGraph(attributePaths = ["payer"])
+    @EntityGraph(attributePaths = ["payer", "category"])
     fun findByGroupIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc(groupId: Long): List<Transaction>
+
+    @EntityGraph(attributePaths = ["payer", "category"])
+    fun findByGroupIdAndCategoryIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc(
+        groupId: Long,
+        categoryId: Long
+    ): List<Transaction>
 }

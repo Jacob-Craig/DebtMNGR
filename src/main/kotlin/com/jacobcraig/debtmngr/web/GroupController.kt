@@ -1,22 +1,20 @@
 package com.jacobcraig.debtmngr.web
 
+import com.jacobcraig.debtmngr.service.CategoryService
 import com.jacobcraig.debtmngr.service.GroupService
 import com.jacobcraig.debtmngr.service.TransactionService
 import jakarta.validation.Valid
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.validation.BindingResult
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.ModelAttribute
-import org.springframework.web.bind.annotation.PathVariable
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.*
 
 @Controller
 @RequestMapping("/groups")
 class GroupController(
     private val groupService: GroupService,
-    private val transactionService: TransactionService
+    private val transactionService: TransactionService,
+    private val categoryService: CategoryService
 ) {
 
     @GetMapping("/new")
@@ -38,8 +36,12 @@ class GroupController(
     }
 
     @GetMapping("/{id}")
-    fun showGroup(@PathVariable("id") id: Long, model: Model): String {
-        populateGroupAndParticipants(model, id)
+    fun showGroup(
+        @PathVariable("id") id: Long,
+        @RequestParam(name = "categoryId", required = false) categoryId: Long?,
+        model: Model
+    ): String {
+        populateGroupAndParticipants(model, id, categoryId)
         if (!model.containsAttribute("participantForm")) {
             model.addAttribute("participantForm", AddParticipantForm())
         }
@@ -61,9 +63,10 @@ class GroupController(
         return "redirect:/groups/$id"
     }
 
-    private fun populateGroupAndParticipants(model: Model, groupId: Long) {
+    private fun populateGroupAndParticipants(model: Model, groupId: Long, categoryId: Long? = null) {
         val group = groupService.getGroup(groupId)
         val participants = groupService.getParticipants(groupId)
+        val categories = categoryService.getCategoriesForGroup(groupId)
         val rawBalances = transactionService.getParticipantBalances(groupId)
         val balances = participants.associate { p ->
             val pId = checkNotNull(p.id)
@@ -76,10 +79,14 @@ class GroupController(
                 isZero = net == 0L
             )
         }
-        val transactions = transactionService.getTransactionsForGroup(groupId)
+        val transactions = transactionService.getTransactionsForGroup(groupId, categoryId)
 
         model.addAttribute("group", group)
         model.addAttribute("participants", participants)
+        model.addAttribute("categories", categories)
+        if (categoryId != null) {
+            model.addAttribute("selectedCategoryId", categoryId)
+        }
         model.addAttribute("balances", balances)
         model.addAttribute("transactions", transactions)
     }

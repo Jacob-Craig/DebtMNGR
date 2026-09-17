@@ -2,6 +2,7 @@ package com.jacobcraig.debtmngr.web
 
 import com.jacobcraig.debtmngr.domain.Participant
 import com.jacobcraig.debtmngr.domain.SplitMode
+import com.jacobcraig.debtmngr.service.CategoryService
 import com.jacobcraig.debtmngr.service.GroupService
 import com.jacobcraig.debtmngr.service.TransactionService
 import jakarta.validation.Valid
@@ -16,7 +17,8 @@ import java.time.ZoneOffset
 @RequestMapping("/groups/{groupId}/transactions")
 class TransactionController(
     private val groupService: GroupService,
-    private val transactionService: TransactionService
+    private val transactionService: TransactionService,
+    private val categoryService: CategoryService
 ) {
 
     @GetMapping("/new")
@@ -63,6 +65,15 @@ class TransactionController(
             val amountMinorUnits = amount.toMinorUnits()
             val dateInstant = form.date?.atStartOfDay(ZoneOffset.UTC)?.toInstant()
 
+            val resolvedCategoryId = when {
+                !form.customCategoryName.isNullOrBlank() -> {
+                    val created = categoryService.createCustomCategory(groupId, form.customCategoryName!!.trim())
+                    created.id
+                }
+                form.categoryId != null && form.categoryId!! > 0 -> form.categoryId
+                else -> null
+            }
+
             when (form.splitMode) {
                 SplitMode.EQUAL -> {
                     transactionService.createExpense(
@@ -71,7 +82,8 @@ class TransactionController(
                         amount = amountMinorUnits,
                         description = form.description,
                         consumerIds = form.consumerIds,
-                        date = dateInstant
+                        date = dateInstant,
+                        categoryId = resolvedCategoryId
                     )
                 }
                 SplitMode.EXACT -> {
@@ -87,7 +99,8 @@ class TransactionController(
                         consumerIds = exactAmountsMinor.keys.toList(),
                         date = dateInstant,
                         splitMode = SplitMode.EXACT,
-                        exactAmounts = exactAmountsMinor
+                        exactAmounts = exactAmountsMinor,
+                        categoryId = resolvedCategoryId
                     )
                 }
             }
@@ -132,7 +145,9 @@ class TransactionController(
     private fun populateGroupAndParticipants(model: Model, groupId: Long) {
         val group = groupService.getGroup(groupId)
         val participants = groupService.getParticipants(groupId)
+        val categories = categoryService.getCategoriesForGroup(groupId)
         model.addAttribute("group", group)
         model.addAttribute("participants", participants)
+        model.addAttribute("categories", categories)
     }
 }

@@ -1,6 +1,7 @@
 package com.jacobcraig.debtmngr.service
 
 import com.jacobcraig.debtmngr.domain.*
+import com.jacobcraig.debtmngr.repository.CategoryRepository
 import com.jacobcraig.debtmngr.repository.EntryRepository
 import com.jacobcraig.debtmngr.repository.GroupRepository
 import com.jacobcraig.debtmngr.repository.ParticipantRepository
@@ -16,7 +17,8 @@ class TransactionService(
     private val groupRepository: GroupRepository,
     private val participantRepository: ParticipantRepository,
     private val transactionRepository: TransactionRepository,
-    private val entryRepository: EntryRepository
+    private val entryRepository: EntryRepository,
+    private val categoryRepository: CategoryRepository
 ) {
 
     @JvmOverloads
@@ -28,7 +30,8 @@ class TransactionService(
         consumerIds: List<Long> = emptyList(),
         date: Instant? = null,
         splitMode: SplitMode = SplitMode.EQUAL,
-        exactAmounts: Map<Long, Long> = emptyMap()
+        exactAmounts: Map<Long, Long> = emptyMap(),
+        categoryId: Long? = null
     ): Transaction {
         require(description.isNotBlank()) { "Expense description cannot be blank" }
         require(amount > 0) { "Expense amount must be positive" }
@@ -64,12 +67,22 @@ class TransactionService(
             }
         }
 
+        val category = categoryId?.let { catId ->
+            val cat = categoryRepository.findById(catId)
+                .orElseThrow { EntityNotFoundException("Category not found with id: $catId") }
+            require(cat.isSystem || cat.group?.id == groupId) {
+                "Category ${cat.name} does not belong to group $groupId"
+            }
+            cat
+        }
+
         val transaction = Transaction(
             group = group,
             description = description.trim(),
             amount = amount,
             payer = payer,
             type = TransactionType.EXPENSE,
+            category = category,
             createdAt = date ?: Instant.now()
         )
 
@@ -108,11 +121,15 @@ class TransactionService(
     }
 
     @Transactional(readOnly = true)
-    fun getTransactionsForGroup(groupId: Long): List<Transaction> {
+    fun getTransactionsForGroup(groupId: Long, categoryId: Long? = null): List<Transaction> {
         if (!groupRepository.existsById(groupId)) {
             throw EntityNotFoundException("Group not found with id: $groupId")
         }
-        return transactionRepository.findByGroupIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc(groupId)
+        return if (categoryId != null) {
+            transactionRepository.findByGroupIdAndCategoryIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc(groupId, categoryId)
+        } else {
+            transactionRepository.findByGroupIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc(groupId)
+        }
     }
 
     @Transactional(readOnly = true)

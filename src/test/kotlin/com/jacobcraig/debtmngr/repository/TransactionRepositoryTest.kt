@@ -1,5 +1,6 @@
 package com.jacobcraig.debtmngr.repository
 
+import com.jacobcraig.debtmngr.domain.Category
 import com.jacobcraig.debtmngr.domain.Entry
 import com.jacobcraig.debtmngr.domain.EntryType
 import com.jacobcraig.debtmngr.domain.Group
@@ -82,5 +83,34 @@ class TransactionRepositoryTest @Autowired constructor(
         assertTrue(descriptions.contains("Hotel"))
         assertTrue(descriptions.contains("Flight"))
         assertFalse(descriptions.contains("Cancelled Taxi"))
+    }
+
+    @Test
+    fun `findByGroupIdAndCategoryIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc filters by category`() {
+        val group = entityManager.persist(Group(name = "Trip to Spain"))
+        val alice = entityManager.persist(Participant(group = group, name = "Alice"))
+        val groceriesCat = entityManager.persist(Category(name = "Groceries", systemKey = "GROCERIES"))
+        val transportCat = entityManager.persist(Category(name = "Transport", systemKey = "TRANSPORT"))
+
+        val tx1 = Transaction(group = group, description = "Supermarket", amount = 5000L, payer = alice, category = groceriesCat)
+        tx1.addEntry(Entry(transaction = tx1, account = alice.account, type = EntryType.CREDIT, amount = 5000L))
+        tx1.addEntry(Entry(transaction = tx1, account = alice.account, type = EntryType.DEBIT, amount = 5000L))
+
+        val tx2 = Transaction(group = group, description = "Metro", amount = 1000L, payer = alice, category = transportCat)
+        tx2.addEntry(Entry(transaction = tx2, account = alice.account, type = EntryType.CREDIT, amount = 1000L))
+        tx2.addEntry(Entry(transaction = tx2, account = alice.account, type = EntryType.DEBIT, amount = 1000L))
+
+        transactionRepository.save(tx1)
+        transactionRepository.save(tx2)
+        entityManager.flush()
+        entityManager.clear()
+
+        val filtered = transactionRepository.findByGroupIdAndCategoryIdAndIsDeletedFalseOrderByCreatedAtDescIdDesc(
+            groupId = checkNotNull(group.id),
+            categoryId = checkNotNull(groceriesCat.id)
+        )
+        assertEquals(1, filtered.size)
+        assertEquals("Supermarket", filtered[0].description)
+        assertEquals("Groceries", filtered[0].category?.name)
     }
 }

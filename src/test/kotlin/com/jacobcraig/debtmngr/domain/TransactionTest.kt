@@ -168,4 +168,55 @@ class TransactionTest {
         )
         assertEquals(pastInstant, tx.createdAt)
     }
+
+    @Test
+    fun `can assign system category to transaction`() {
+        val group = Group(name = "Apartment")
+        val payer = Participant(group = group, name = "Alice")
+        val category = Category(name = "Groceries", systemKey = "GROCERIES")
+        val tx = Transaction(
+            group = group,
+            description = "Groceries run",
+            amount = 500L,
+            payer = payer,
+            category = category
+        )
+
+        assertSame(category, tx.category)
+    }
+
+    @Test
+    fun `can assign group custom category to transaction`() {
+        val group = Group(name = "Apartment")
+        val payer = Participant(group = group, name = "Alice")
+        val category = Category(name = "Cleaning Supplies", group = group)
+        val tx = Transaction(
+            group = group,
+            description = "Mop and bucket",
+            amount = 200L,
+            payer = payer,
+            category = category
+        )
+
+        assertSame(category, tx.category)
+    }
+
+    @Test
+    fun `assigning custom category from different group throws IllegalArgumentException`() {
+        val group1 = Group(id = 1L, name = "Apartment 1")
+        val group2 = Group(id = 2L, name = "Apartment 2")
+        val payer = Participant(group = group1, name = "Alice")
+        val categoryGroup2 = Category(id = 10L, name = "Custom in Group 2", group = group2)
+
+        val ex = assertThrows<IllegalArgumentException> {
+            Transaction(
+                group = group1,
+                description = "Supplies",
+                amount = 200L,
+                payer = payer,
+                category = categoryGroup2
+            )
+        }
+        assertTrue(ex.message!!.contains("does not belong to group"))
+    }
 }

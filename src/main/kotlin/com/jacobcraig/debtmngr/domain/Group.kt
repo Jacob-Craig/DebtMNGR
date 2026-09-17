@@ -21,5 +21,9 @@ class Group(
 
     @OneToMany(mappedBy = "group", cascade = [CascadeType.ALL], orphanRemoval = true)
     @OrderBy("id ASC")
-    val participants: MutableList<Participant> = mutableListOf()
+    val participants: MutableList<Participant> = mutableListOf(),
+
+    @OneToMany(mappedBy = "group", cascade = [CascadeType.ALL], orphanRemoval = true)
+    @OrderBy("name ASC")
+    val categories: MutableList<Category> = mutableListOf()
 )

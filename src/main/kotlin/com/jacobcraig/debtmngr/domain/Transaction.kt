@@ -38,6 +38,10 @@ class Transaction(
     @JoinColumn(name = "original_transaction_id")
     var originalTransaction: Transaction? = null,
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    var category: Category? = null,
+
     @Column(nullable = false, updatable = false)
     val createdAt: Instant = Instant.now(),
 
@@ -48,6 +52,11 @@ class Transaction(
     init {
         require(description.isNotBlank()) { "Transaction description cannot be blank" }
         require(amount > 0) { "Transaction amount must be positive" }
+        category?.let { cat ->
+            require(cat.isSystem || cat.group == group || (cat.group?.id != null && cat.group?.id == group.id)) {
+                "Category ${cat.name} does not belong to group ${group.id ?: group.name}"
+            }
+        }
     }
 
     fun addEntry(entry: Entry) {
