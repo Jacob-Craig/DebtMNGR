@@ -12,6 +12,7 @@ data class FormattedBalance(
     val isZero: Boolean
 )
 
+@JvmOverloads
 fun Long.toFormattedBalance(currencySymbol: String = "£"): String {
     val isNeg = this < 0
     val absolute = abs(this)
@@ -25,6 +26,7 @@ fun Long.toFormattedBalance(currencySymbol: String = "£"): String {
     }
 }
 
+@JvmOverloads
 fun Long.toFormattedMoney(currencySymbol: String = "£"): String {
     val absolute = abs(this)
     val major = absolute / 100

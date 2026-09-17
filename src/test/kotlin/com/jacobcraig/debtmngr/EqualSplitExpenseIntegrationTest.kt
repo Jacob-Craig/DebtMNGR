@@ -86,6 +86,7 @@ class EqualSplitExpenseIntegrationTest {
                 .param("amount", "10.00")
                 .param("payerId", aliceId.toString())
                 .param("consumerIds", aliceId.toString(), bobId.toString(), charlieId.toString())
+                .param("date", "2026-09-17")
         )
             .andExpect(status().is3xxRedirection)
             .andExpect(redirectedUrl("/groups/$groupId"))
@@ -130,6 +131,7 @@ class EqualSplitExpenseIntegrationTest {
             .andExpect(content().string(containsString("-£3.33")))
             .andExpect(content().string(containsString("Piazza Dinner")))
             .andExpect(content().string(containsString("£10.00")))
+            .andExpect(content().string(containsString("17 Sep 2026")))
             .andExpect(content().string(not(containsString("No transactions yet"))))
 
         // 5. Bob pays £7.01 (701 pence) for "Museum Tickets" split between Alice and Charlie (N=2, payer Bob NOT in split)

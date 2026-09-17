@@ -10,6 +10,7 @@ object EqualSplitCalculator {
     fun calculate(totalAmount: Long, payerId: Long, consumerIds: List<Long>): List<SplitShare> {
         require(totalAmount > 0) { "Total amount must be greater than zero" }
         require(consumerIds.isNotEmpty()) { "Consumer list cannot be empty" }
+        require(consumerIds.toSet().size == consumerIds.size) { "Consumer IDs must not contain duplicates" }
 
         val n = consumerIds.size
         val baseShare = totalAmount / n

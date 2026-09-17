@@ -184,7 +184,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" th:text="${tx.payer.name}">
                                 Alice
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900" th:text="${tx.formattedAmount}">
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900" th:text="${T(com.jacobcraig.debtmngr.web.FormattersKt).toFormattedMoney(tx.amount)}">
                                 £25.00
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500" th:text="${#temporals.format(tx.createdAt, 'dd MMM yyyy')}">
