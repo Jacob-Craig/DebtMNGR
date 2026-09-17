@@ -37,6 +37,13 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
+                    <a th:href="@{/groups/{id}/settle(id=${group.id})}"
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <svg class="-ml-1 mr-2 h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        Settle Up
+                    </a>
                     <a th:href="@{/groups/{id}/transactions/new(id=${group.id})}"
                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                         <svg class="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,12 +114,17 @@
                                     £0.00
                                 </span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                <a th:unless="${participant.isSelf}"
+                                   th:href="@{/groups/{id}/settle(id=${group.id}, receiverId=${participant.id})}"
+                                   class="text-indigo-600 hover:text-indigo-900 text-xs font-medium hover:underline">
+                                    Settle
+                                </a>
                                 <form th:unless="${participant.isSelf}"
                                       th:action="@{/groups/{id}/participants/{participantId}/self(id=${group.id}, participantId=${participant.id})}"
                                       method="post" class="inline">
                                     <button type="submit"
-                                            class="text-indigo-600 hover:text-indigo-900 text-xs font-medium hover:underline">
+                                            class="text-gray-500 hover:text-gray-700 text-xs font-medium hover:underline">
                                         Designate as Self
                                     </button>
                                 </form>
@@ -218,17 +230,30 @@
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         <tr th:each="tx : ${transactions}" class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" th:text="${tx.description}">
-                                Dinner
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                <div class="flex items-center gap-2">
+                                    <span th:text="${tx.description}">Dinner</span>
+                                    <span th:if="${tx.isLocked}"
+                                          class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200"
+                                          title="Locked after settlement">
+                                        Locked
+                                    </span>
+                                </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <span th:if="${tx.category != null}"
-                                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200"
-                                      th:text="${tx.category.name}">
-                                    Groceries
+                                <span th:if="${tx.type == T(com.jacobcraig.debtmngr.domain.TransactionType).SETTLEMENT}"
+                                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+                                    Settlement
                                 </span>
-                                <span th:unless="${tx.category != null}" class="text-xs text-gray-400 italic">
-                                    Uncategorized
+                                <span th:unless="${tx.type == T(com.jacobcraig.debtmngr.domain.TransactionType).SETTLEMENT}">
+                                    <span th:if="${tx.category != null}"
+                                          class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                          th:text="${tx.category.name}">
+                                        Groceries
+                                    </span>
+                                    <span th:unless="${tx.category != null}" class="text-xs text-gray-400 italic">
+                                        Uncategorized
+                                    </span>
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" th:text="${tx.payer.name}">

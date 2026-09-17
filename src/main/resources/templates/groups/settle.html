@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="'DebtMNGR - Settle Up - ' + ${group.name}">DebtMNGR - Settle Up</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+    <nav class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <a href="/" class="text-xl font-bold tracking-tight text-indigo-600 hover:text-indigo-700">
+                        DebtMNGR
+                    </a>
+                </div>
+                <div>
+                    <a th:href="@{/groups/{id}(id=${group.id})}" class="text-sm font-medium text-gray-600 hover:text-gray-900">
+                        &larr; Back to Group
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div class="mb-6">
+            <a th:href="@{/groups/{id}(id=${group.id})}" class="text-sm font-medium text-indigo-600 hover:text-indigo-500 flex items-center gap-1">
+                &larr; Back to <span th:text="${group.name}">Group</span>
+            </a>
+            <h1 class="text-2xl font-bold text-gray-900 mt-2">Settle Up</h1>
+            <p class="text-sm text-gray-500 mt-1">
+                Record a direct payment between two members. This settles outstanding debt and locks prior unsettled transactions between them against further direct edits.
+            </p>
+        </div>
+
+        <div class="bg-white shadow sm:rounded-lg border border-gray-200 p-6">
+            <form th:action="@{/groups/{id}/settle(id=${group.id})}" th:object="${settleForm}" method="post" class="space-y-6">
+                <!-- Global error alert -->
+                <div th:if="${#fields.hasGlobalErrors()}" class="p-4 rounded-md bg-red-50 border border-red-200">
+                    <div class="text-sm text-red-700" th:each="err : ${#fields.globalErrors()}" th:text="${err}">
+                        Global error
+                    </div>
+                </div>
+
+                <!-- Payer (Who is paying money) -->
+                <div>
+                    <label for="payerId" class="block text-sm font-medium text-gray-700">
+                        Payer (Who is paying) <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1">
+                        <select id="payerId"
+                                th:field="*{payerId}"
+                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                                th:classappend="${#fields.hasErrors('payerId')} ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'">
+                            <option value="">-- Select Payer --</option>
+                            <option th:each="p : ${participants}"
+                                    th:value="${p.id}"
+                                    th:text="${p.name} + (${p.isSelf} ? ' (You)' : '') + (${balances != null and balances[p.id] != null} ? ' - ' + ${balances[p.id].formatted} : '')">
+                                Alice (You) - +£10.00
+                            </option>
+                        </select>
+                    </div>
+                    <p th:if="${#fields.hasErrors('payerId')}" th:errors="*{payerId}" class="mt-1 text-sm text-red-600">
+                        Payer error
+                    </p>
+                </div>
+
+                <!-- Receiver (Who is receiving money) -->
+                <div>
+                    <label for="receiverId" class="block text-sm font-medium text-gray-700">
+                        Receiver (Who is receiving) <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1">
+                        <select id="receiverId"
+                                th:field="*{receiverId}"
+                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                                th:classappend="${#fields.hasErrors('receiverId')} ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'">
+                            <option value="">-- Select Receiver --</option>
+                            <option th:each="p : ${participants}"
+                                    th:value="${p.id}"
+                                    th:text="${p.name} + (${p.isSelf} ? ' (You)' : '') + (${balances != null and balances[p.id] != null} ? ' - ' + ${balances[p.id].formatted} : '')">
+                                Bob - -£10.00
+                            </option>
+                        </select>
+                    </div>
+                    <p th:if="${#fields.hasErrors('receiverId')}" th:errors="*{receiverId}" class="mt-1 text-sm text-red-600">
+                        Receiver error
+                    </p>
+                </div>
+
+                <!-- Settlement Amount -->
+                <div>
+                    <label for="amount" class="block text-sm font-medium text-gray-700">
+                        Settlement Amount (£) <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1 relative rounded-md shadow-sm">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <span class="text-gray-500 sm:text-sm">£</span>
+                        </div>
+                        <input type="number"
+                               id="amount"
+                               step="0.01"
+                               min="0.01"
+                               th:field="*{amount}"
+                               placeholder="0.00"
+                               class="block w-full pl-7 pr-12 rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                               th:classappend="${#fields.hasErrors('amount')} ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'" />
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <span class="text-gray-400 sm:text-xs">GBP</span>
+                        </div>
+                    </div>
+                    <p th:if="${#fields.hasErrors('amount')}" th:errors="*{amount}" class="mt-1 text-sm text-red-600">
+                        Amount error
+                    </p>
+                </div>
+
+                <!-- Date -->
+                <div>
+                    <label for="date" class="block text-sm font-medium text-gray-700">
+                        Date <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1">
+                        <input type="date"
+                               id="date"
+                               th:field="*{date}"
+                               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                               th:classappend="${#fields.hasErrors('date')} ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'" />
+                    </div>
+                    <p th:if="${#fields.hasErrors('date')}" th:errors="*{date}" class="mt-1 text-sm text-red-600">
+                        Date error
+                    </p>
+                </div>
+
+                <!-- Notes / Reference -->
+                <div>
+                    <label for="notes" class="block text-sm font-medium text-gray-700">
+                        Payment Method / Notes <span class="text-xs text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <div class="mt-1">
+                        <input type="text"
+                               id="notes"
+                               th:field="*{notes}"
+                               placeholder="e.g. Bank transfer, Cash, Revolut"
+                               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" />
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Optional reference note describing how payment was made.</p>
+                </div>
+
+                <!-- Form Action Buttons -->
+                <div class="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
+                    <a th:href="@{/groups/{id}(id=${group.id})}"
+                       class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Cancel
+                    </a>
+                    <button type="submit"
+                            class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Record Settlement
+                    </button>
+                </div>
+            </form>
+        </div>
+    </main>
+</body>
+</html>

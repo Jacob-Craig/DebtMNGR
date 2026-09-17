@@ -220,4 +220,45 @@ class TransactionTest {
         val msg = checkNotNull(ex.message)
         assertTrue(msg.contains("does not belong to group"))
     }
+
+    @Test
+    fun `settlement transaction initialization and balanced entries`() {
+        val group = Group(name = "Apartment")
+        val alice = Participant(group = group, name = "Alice")
+        val bob = Participant(group = group, name = "Bob")
+
+        val settlement = Transaction(
+            group = group,
+            description = "Settlement: Bob paid Alice",
+            amount = 1500L,
+            payer = bob,
+            type = TransactionType.SETTLEMENT
+        )
+
+        val creditBob = Entry(transaction = settlement, account = bob.account, type = EntryType.CREDIT, amount = 1500L)
+        val debitAlice = Entry(transaction = settlement, account = alice.account, type = EntryType.DEBIT, amount = 1500L)
+        settlement.addEntry(creditBob)
+        settlement.addEntry(debitAlice)
+
+        assertEquals(TransactionType.SETTLEMENT, settlement.type)
+        assertFalse(settlement.isLocked)
+        assertTrue(settlement.isBalanced())
+        assertDoesNotThrow { settlement.validateDoubleEntry() }
+    }
+
+    @Test
+    fun `transaction can be locked`() {
+        val group = Group(name = "Apartment")
+        val alice = Participant(group = group, name = "Alice")
+        val tx = Transaction(
+            group = group,
+            description = "Dinner",
+            amount = 2000L,
+            payer = alice
+        )
+
+        assertFalse(tx.isLocked)
+        tx.isLocked = true
+        assertTrue(tx.isLocked)
+    }
 }

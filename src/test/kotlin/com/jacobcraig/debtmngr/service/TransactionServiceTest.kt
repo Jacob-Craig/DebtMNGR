@@ -577,4 +577,221 @@ class TransactionServiceTest {
         }
         assertEquals("Group not found with id: 99", ex.message)
     }
+
+    @Test
+    fun `createSettlement creates balanced SETTLEMENT transaction and locks prior unlocked transactions involving both participants`() {
+        val priorTx = Transaction(
+            id = 101L,
+            group = group,
+            description = "Dinner",
+            amount = 2000L,
+            payer = alice,
+            isLocked = false
+        )
+        `when`(
+            transactionRepository.findUnlockedTransactionsInvolvingBothAccounts(
+                1L,
+                checkNotNull(bobAccount.id),
+                checkNotNull(aliceAccount.id)
+            )
+        ).thenReturn(listOf(priorTx))
+
+        val captor = ArgumentCaptor.forClass(Transaction::class.java)
+        `when`(transactionRepository.save(captor.capture())).thenAnswer { it.arguments[0] }
+
+        val result = transactionService.createSettlement(
+            groupId = 1L,
+            payerId = 20L, // Bob
+            receiverId = 10L, // Alice
+            amount = 1000L
+        )
+
+        assertNotNull(result)
+        // Verify prior transaction was locked
+        assertTrue(priorTx.isLocked)
+        verify(transactionRepository).save(priorTx)
+
+        // Verify the created settlement transaction
+        val captured = captor.allValues.last()
+        assertEquals("Settlement: Bob paid Alice", captured.description)
+        assertEquals(1000L, captured.amount)
+        assertSame(bob, captured.payer)
+        assertSame(group, captured.group)
+        assertEquals(TransactionType.SETTLEMENT, captured.type)
+        assertFalse(captured.isLocked)
+        assertNull(captured.category)
+
+        assertEquals(2, captured.entries.size)
+        assertEquals(1000L, captured.totalCredits())
+        assertEquals(1000L, captured.totalDebits())
+        assertTrue(captured.isBalanced())
+
+        val creditEntry = captured.entries.first { it.type == EntryType.CREDIT }
+        assertEquals(1000L, creditEntry.amount)
+        assertSame(bob.account, creditEntry.account)
+
+        val debitEntry = captured.entries.first { it.type == EntryType.DEBIT }
+        assertEquals(1000L, debitEntry.amount)
+        assertSame(alice.account, debitEntry.account)
+    }
+
+    @Test
+    fun `createSettlement with custom notes appends notes to description`() {
+        `when`(
+            transactionRepository.findUnlockedTransactionsInvolvingBothAccounts(
+                1L,
+                checkNotNull(bobAccount.id),
+                checkNotNull(aliceAccount.id)
+            )
+        ).thenReturn(emptyList())
+
+        val captor = ArgumentCaptor.forClass(Transaction::class.java)
+        `when`(transactionRepository.save(captor.capture())).thenAnswer { it.arguments[0] }
+
+        val result = transactionService.createSettlement(
+            groupId = 1L,
+            payerId = 20L,
+            receiverId = 10L,
+            amount = 500L,
+            notes = "Monzo transfer"
+        )
+
+        assertNotNull(result)
+        val captured = captor.allValues.last()
+        assertEquals("Settlement: Bob paid Alice - Monzo transfer", captured.description)
+    }
+
+    @Test
+    fun `createSettlement with custom date sets createdAt on transaction`() {
+        `when`(
+            transactionRepository.findUnlockedTransactionsInvolvingBothAccounts(
+                1L,
+                checkNotNull(bobAccount.id),
+                checkNotNull(aliceAccount.id)
+            )
+        ).thenReturn(emptyList())
+
+        val captor = ArgumentCaptor.forClass(Transaction::class.java)
+        `when`(transactionRepository.save(captor.capture())).thenAnswer { it.arguments[0] }
+
+        val customDate = java.time.Instant.parse("2026-06-01T12:00:00Z")
+        val result = transactionService.createSettlement(
+            groupId = 1L,
+            payerId = 20L,
+            receiverId = 10L,
+            amount = 500L,
+            date = customDate
+        )
+
+        assertNotNull(result)
+        val captured = captor.allValues.last()
+        assertEquals(customDate, captured.createdAt)
+    }
+
+    @Test
+    fun `createSettlement with same payer and receiver throws IllegalArgumentException`() {
+        val ex = assertThrows<IllegalArgumentException> {
+            transactionService.createSettlement(
+                groupId = 1L,
+                payerId = 10L,
+                receiverId = 10L,
+                amount = 500L
+            )
+        }
+        assertEquals("Payer and receiver cannot be the same participant", ex.message)
+        verify(transactionRepository, never()).save(any())
+    }
+
+    @Test
+    fun `createSettlement with non-positive amount throws IllegalArgumentException`() {
+        val ex = assertThrows<IllegalArgumentException> {
+            transactionService.createSettlement(
+                groupId = 1L,
+                payerId = 20L,
+                receiverId = 10L,
+                amount = 0L
+            )
+        }
+        assertEquals("Settlement amount must be positive", ex.message)
+        verify(transactionRepository, never()).save(any())
+    }
+
+    @Test
+    fun `createSettlement with nonexistent group throws EntityNotFoundException`() {
+        `when`(groupRepository.findById(99L)).thenReturn(Optional.empty())
+
+        val ex = assertThrows<EntityNotFoundException> {
+            transactionService.createSettlement(
+                groupId = 99L,
+                payerId = 20L,
+                receiverId = 10L,
+                amount = 500L
+            )
+        }
+        assertEquals("Group not found with id: 99", ex.message)
+    }
+
+    @Test
+    fun `createSettlement with nonexistent payer throws EntityNotFoundException`() {
+        `when`(participantRepository.findById(99L)).thenReturn(Optional.empty())
+
+        val ex = assertThrows<EntityNotFoundException> {
+            transactionService.createSettlement(
+                groupId = 1L,
+                payerId = 99L,
+                receiverId = 10L,
+                amount = 500L
+            )
+        }
+        assertEquals("Participant not found with id: 99", ex.message)
+    }
+
+    @Test
+    fun `createSettlement with nonexistent receiver throws EntityNotFoundException`() {
+        `when`(participantRepository.findById(99L)).thenReturn(Optional.empty())
+
+        val ex = assertThrows<EntityNotFoundException> {
+            transactionService.createSettlement(
+                groupId = 1L,
+                payerId = 20L,
+                receiverId = 99L,
+                amount = 500L
+            )
+        }
+        assertEquals("Participant not found with id: 99", ex.message)
+    }
+
+    @Test
+    fun `createSettlement with payer from another group throws IllegalArgumentException`() {
+        val otherGroup = Group(id = 2L, name = "Other")
+        val otherPayer = Participant(id = 99L, group = otherGroup, name = "Dave")
+        `when`(participantRepository.findById(99L)).thenReturn(Optional.of(otherPayer))
+
+        val ex = assertThrows<IllegalArgumentException> {
+            transactionService.createSettlement(
+                groupId = 1L,
+                payerId = 99L,
+                receiverId = 10L,
+                amount = 500L
+            )
+        }
+        assertEquals("Payer does not belong to group 1", ex.message)
+    }
+
+    @Test
+    fun `createSettlement with receiver from another group throws IllegalArgumentException`() {
+        val otherGroup = Group(id = 2L, name = "Other")
+        val otherReceiver = Participant(id = 99L, group = otherGroup, name = "Dave")
+        `when`(participantRepository.findById(99L)).thenReturn(Optional.of(otherReceiver))
+
+        val ex = assertThrows<IllegalArgumentException> {
+            transactionService.createSettlement(
+                groupId = 1L,
+                payerId = 20L,
+                receiverId = 99L,
+                amount = 500L
+            )
+        }
+        assertEquals("Receiver does not belong to group 1", ex.message)
+    }
 }

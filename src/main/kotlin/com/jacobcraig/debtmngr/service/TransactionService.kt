@@ -120,6 +120,83 @@ class TransactionService(
         return transactionRepository.save(transaction)
     }
 
+    @JvmOverloads
+    fun createSettlement(
+        groupId: Long,
+        payerId: Long,
+        receiverId: Long,
+        amount: Long,
+        date: Instant? = null,
+        notes: String? = null
+    ): Transaction {
+        require(amount > 0) { "Settlement amount must be positive" }
+        require(payerId != receiverId) { "Payer and receiver cannot be the same participant" }
+
+        val group = groupRepository.findById(groupId)
+            .orElseThrow { EntityNotFoundException("Group not found with id: $groupId") }
+
+        val payer = participantRepository.findById(payerId)
+            .orElseThrow { EntityNotFoundException("Participant not found with id: $payerId") }
+        require(payer.group.id == groupId) { "Payer does not belong to group $groupId" }
+
+        val receiver = participantRepository.findById(receiverId)
+            .orElseThrow { EntityNotFoundException("Participant not found with id: $receiverId") }
+        require(receiver.group.id == groupId) { "Receiver does not belong to group $groupId" }
+
+        val payerAccountId = checkNotNull(payer.account.id) { "Payer account must be initialized" }
+        val receiverAccountId = checkNotNull(receiver.account.id) { "Receiver account must be initialized" }
+
+        val priorTransactions = transactionRepository.findUnlockedTransactionsInvolvingBothAccounts(
+            groupId = groupId,
+            account1Id = payerAccountId,
+            account2Id = receiverAccountId
+        )
+        for (priorTx in priorTransactions) {
+            priorTx.isLocked = true
+            transactionRepository.save(priorTx)
+        }
+
+        val description = if (!notes.isNullOrBlank()) {
+            "Settlement: ${payer.name} paid ${receiver.name} - ${notes.trim()}"
+        } else {
+            "Settlement: ${payer.name} paid ${receiver.name}"
+        }
+
+        val settlement = Transaction(
+            group = group,
+            description = description,
+            amount = amount,
+            payer = payer,
+            type = TransactionType.SETTLEMENT,
+            createdAt = date ?: Instant.now()
+        )
+
+        val creditEntry = Entry(
+            transaction = settlement,
+            account = payer.account,
+            type = EntryType.CREDIT,
+            amount = amount
+        )
+        settlement.addEntry(creditEntry)
+
+        val debitEntry = Entry(
+            transaction = settlement,
+            account = receiver.account,
+            type = EntryType.DEBIT,
+            amount = amount
+        )
+        settlement.addEntry(debitEntry)
+
+        val totalDebits = settlement.totalDebits()
+        val totalCredits = settlement.totalCredits()
+        check(totalDebits == amount && totalCredits == amount) {
+            "Total debits ($totalDebits) and credits ($totalCredits) must equal settlement amount ($amount)"
+        }
+        settlement.validateDoubleEntry()
+
+        return transactionRepository.save(settlement)
+    }
+
     @Transactional(readOnly = true)
     fun getTransactionsForGroup(groupId: Long, categoryId: Long? = null): List<Transaction> {
         if (!groupRepository.existsById(groupId)) {

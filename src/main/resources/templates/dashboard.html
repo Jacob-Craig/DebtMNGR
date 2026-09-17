@@ -53,7 +53,16 @@
             <div th:each="group : ${groups}"
                  class="bg-white overflow-hidden shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200">
                 <div class="p-6">
-                    <h2 class="text-lg font-semibold text-gray-900 truncate" th:text="${group.name}">Group Name</h2>
+                    <div class="flex justify-between items-start gap-2">
+                        <h2 class="text-lg font-semibold text-gray-900 truncate" th:text="${group.name}">Group Name</h2>
+                        <span th:if="${groupBalances != null and groupBalances[group.id] != null}"
+                              th:with="bal=${groupBalances[group.id]}"
+                              th:text="${bal.formatted}"
+                              th:classappend="${bal.isPositive ? 'text-green-700 bg-green-50 border-green-200' : (bal.isNegative ? 'text-red-700 bg-red-50 border-red-200' : 'text-gray-600 bg-gray-50 border-gray-200')}"
+                              class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border shrink-0">
+                            £0.00
+                        </span>
+                    </div>
                     <p class="mt-2 text-sm text-gray-600 line-clamp-2"
                        th:text="${group.description ?: 'No description provided.'}">Group Description</p>
                 </div>
