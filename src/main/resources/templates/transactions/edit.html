@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="'DebtMNGR - Edit Transaction - ' + ${editForm.description}">DebtMNGR - Edit Transaction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+    <nav class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <a href="/" class="text-xl font-bold tracking-tight text-indigo-600 hover:text-indigo-700">
+                        DebtMNGR
+                    </a>
+                </div>
+                <div>
+                    <a th:href="@{/transactions/{id}(id=${transactionId})}" class="text-sm font-medium text-gray-600 hover:text-gray-900">
+                        &larr; Cancel &amp; Return
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div class="mb-6">
+            <a th:href="@{/transactions/{id}(id=${transactionId})}" class="text-sm font-medium text-indigo-600 hover:text-indigo-500 flex items-center gap-1">
+                &larr; Back to Transaction Details
+            </a>
+            <h1 class="text-2xl font-bold text-gray-900 mt-2">Edit Transaction</h1>
+            <p class="text-sm text-gray-500 mt-1">Editing will soft-delete the previous record and create an AuditLog entry preserving historical modifications.</p>
+        </div>
+
+        <div class="bg-white shadow sm:rounded-lg border border-gray-200 p-6">
+            <form th:action="@{/transactions/{id}/edit(id=${transactionId})}" th:object="${editForm}" method="post" class="space-y-6">
+                <!-- Global error alert -->
+                <div th:if="${#fields.hasGlobalErrors()}" class="p-4 rounded-md bg-red-50 border border-red-200">
+                    <div class="text-sm text-red-700" th:each="err : ${#fields.globalErrors()}" th:text="${err}">
+                        Global error
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700">
+                        Description <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1">
+                        <input type="text"
+                               id="description"
+                               th:field="*{description}"
+                               placeholder="e.g. Groceries, Dinner, Train tickets"
+                               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                               th:classappend="${#fields.hasErrors('description')} ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'" />
+                    </div>
+                    <p th:if="${#fields.hasErrors('description')}" th:errors="*{description}" class="mt-1 text-sm text-red-600">
+                        Description error
+                    </p>
+                </div>
+
+                <!-- Amount -->
+                <div>
+                    <label for="amount" class="block text-sm font-medium text-gray-700">
+                        Total Amount (£) <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1 relative rounded-md shadow-sm">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <span class="text-gray-500 sm:text-sm">£</span>
+                        </div>
+                        <input type="number"
+                               step="0.01"
+                               min="0.01"
+                               id="amount"
+                               th:field="*{amount}"
+                               placeholder="0.00"
+                               class="block w-full pl-7 pr-3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                               th:classappend="${#fields.hasErrors('amount')} ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'" />
+                    </div>
+                    <p th:if="${#fields.hasErrors('amount')}" th:errors="*{amount}" class="mt-1 text-sm text-red-600">
+                        Amount error
+                    </p>
+                </div>
+
+                <!-- Payer -->
+                <div>
+                    <label for="payerId" class="block text-sm font-medium text-gray-700">
+                        Paid By (Payer) <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1">
+                        <select id="payerId"
+                                th:field="*{payerId}"
+                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                                th:classappend="${#fields.hasErrors('payerId')} ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'">
+                            <option value="">-- Select Payer --</option>
+                            <option th:each="p : ${participants}"
+                                    th:value="${p.id}"
+                                    th:text="${p.name} + (${p.isSelf} ? ' (You)' : '')">
+                                Alice
+                            </option>
+                        </select>
+                    </div>
+                    <p th:if="${#fields.hasErrors('payerId')}" th:errors="*{payerId}" class="mt-1 text-sm text-red-600">
+                        Payer error
+                    </p>
+                </div>
+
+                <!-- Category -->
+                <div>
+                    <label for="categoryId" class="block text-sm font-medium text-gray-700">Category</label>
+                    <div class="mt-1">
+                        <select id="categoryId"
+                                th:field="*{categoryId}"
+                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                            <option value="">Uncategorized</option>
+                            <option th:each="cat : ${categories}"
+                                    th:value="${cat.id}"
+                                    th:text="${cat.name}">
+                                Groceries
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Date -->
+                <div>
+                    <label for="date" class="block text-sm font-medium text-gray-700">
+                        Date <span class="text-red-500">*</span>
+                    </label>
+                    <div class="mt-1">
+                        <input type="date"
+                               id="date"
+                               th:field="*{date}"
+                               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                               th:classappend="${#fields.hasErrors('date')} ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'" />
+                    </div>
+                    <p th:if="${#fields.hasErrors('date')}" th:errors="*{date}" class="mt-1 text-sm text-red-600">
+                        Date error
+                    </p>
+                </div>
+
+                <!-- Reason for edit -->
+                <div>
+                    <label for="reason" class="block text-sm font-medium text-gray-700">
+                        Reason for Edit
+                    </label>
+                    <div class="mt-1">
+                        <input type="text"
+                               id="reason"
+                               th:field="*{reason}"
+                               placeholder="e.g. Corrected typo in amount, updated consumers"
+                               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" />
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Preserved in the AuditLog for other group members to see.</p>
+                </div>
+
+                <!-- Split Mode Radio Buttons -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Split Mode</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
+                            <input type="radio"
+                                   th:field="*{splitMode}"
+                                   value="EQUAL"
+                                   id="splitModeEqual"
+                                   class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                   onchange="toggleSplitMode('EQUAL')" />
+                            <div class="ml-3">
+                                <span class="block text-sm font-medium text-gray-900">Equal Split</span>
+                                <span class="block text-xs text-gray-500">Divide cost evenly among participants</span>
+                            </div>
+                        </label>
+                        <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50 has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50">
+                            <input type="radio"
+                                   th:field="*{splitMode}"
+                                   value="EXACT"
+                                   id="splitModeExact"
+                                   class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                   onchange="toggleSplitMode('EXACT')" />
+                            <div class="ml-3">
+                                <span class="block text-sm font-medium text-gray-900">Exact Amounts</span>
+                                <span class="block text-xs text-gray-500">Specify exact share per person</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Consumers section (Equal Split) -->
+                <div id="equalSplitSection" th:classappend="*{splitMode == T(com.jacobcraig.debtmngr.domain.SplitMode).EXACT} ? 'hidden' : ''">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Split Between (Consumers) <span class="text-red-500">*</span>
+                    </label>
+                    <div class="space-y-2 border border-gray-200 rounded-md p-3 max-h-48 overflow-y-auto">
+                        <div th:each="p : ${participants}" class="flex items-center">
+                            <input type="checkbox"
+                                   th:id="'consumer_' + ${p.id}"
+                                   th:field="*{consumerIds}"
+                                   th:value="${p.id}"
+                                   class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                            <label th:for="'consumer_' + ${p.id}"
+                                   class="ml-2 text-sm text-gray-700"
+                                   th:text="${p.name} + (${p.isSelf} ? ' (You)' : '')">
+                                Alice
+                            </label>
+                        </div>
+                    </div>
+                    <p th:if="${#fields.hasErrors('consumerIds')}" th:errors="*{consumerIds}" class="mt-1 text-sm text-red-600">
+                        Consumer selection error
+                    </p>
+                </div>
+
+                <!-- Exact Split Section -->
+                <div id="exactSplitSection" th:classappend="*{splitMode == T(com.jacobcraig.debtmngr.domain.SplitMode).EXACT} ? '' : 'hidden'">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Exact Shares Per Participant <span class="text-red-500">*</span>
+                    </label>
+                    <div class="space-y-3 border border-gray-200 rounded-md p-3">
+                        <div th:each="p : ${participants}" class="flex items-center justify-between gap-4">
+                            <label th:for="'exactAmount_' + ${p.id}"
+                                   class="text-sm font-medium text-gray-700 w-1/2"
+                                   th:text="${p.name} + (${p.isSelf} ? ' (You)' : '')">
+                                Alice
+                            </label>
+                            <div class="relative rounded-md shadow-sm w-1/2">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <span class="text-gray-500 sm:text-sm">£</span>
+                                </div>
+                                <input type="number"
+                                       step="0.01"
+                                       min="0"
+                                       th:id="'exactAmount_' + ${p.id}"
+                                       th:name="'exactAmounts[' + ${p.id} + ']'"
+                                       th:value="${editForm.exactAmounts[p.id]}"
+                                       placeholder="0.00"
+                                       class="block w-full pl-7 pr-3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border" />
+                            </div>
+                        </div>
+                    </div>
+                    <p th:if="${#fields.hasErrors('exactAmounts')}" th:errors="*{exactAmounts}" class="mt-1 text-sm text-red-600">
+                        Exact amounts error
+                    </p>
+                </div>
+
+                <!-- Submit and Cancel Buttons -->
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+                    <a th:href="@{/transactions/{id}(id=${transactionId})}"
+                       class="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Cancel
+                    </a>
+                    <button type="submit"
+                            class="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        function toggleSplitMode(mode) {
+            const equalSection = document.getElementById('equalSplitSection');
+            const exactSection = document.getElementById('exactSplitSection');
+            if (mode === 'EQUAL') {
+                equalSection.classList.remove('hidden');
+                exactSection.classList.add('hidden');
+            } else {
+                equalSection.classList.add('hidden');
+                exactSection.classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

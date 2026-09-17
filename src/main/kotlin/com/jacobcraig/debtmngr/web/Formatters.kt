@@ -48,3 +48,7 @@ fun Long.toFormattedMoney(currencySymbol: String = "£"): String {
 fun BigDecimal.toMinorUnits(): Long {
     return this.movePointRight(2).setScale(0, RoundingMode.HALF_UP).toLong()
 }
+
+fun Long.toMoneyBigDecimal(): BigDecimal {
+    return BigDecimal.valueOf(this).movePointLeft(2)
+}

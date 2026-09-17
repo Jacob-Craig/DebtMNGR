@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="'DebtMNGR - Transaction Details - ' + ${transaction.description}">DebtMNGR - Transaction Details</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+    <nav class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <a href="/" class="text-xl font-bold tracking-tight text-indigo-600 hover:text-indigo-700">
+                        DebtMNGR
+                    </a>
+                </div>
+                <div>
+                    <a th:href="@{/groups/{id}(id=${transaction.group.id})}" class="text-sm font-medium text-gray-600 hover:text-gray-900">
+                        &larr; Back to <span th:text="${transaction.group.name}">Group</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        <!-- Soft-Deleted Notification Banner -->
+        <div th:if="${transaction.isDeleted}" class="p-4 rounded-md bg-red-50 border border-red-200">
+            <div class="flex items-center">
+                <svg class="h-5 w-5 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                    <h3 class="text-sm font-semibold text-red-800">Transaction Soft-Deleted</h3>
+                    <p class="text-xs text-red-700 mt-0.5">This transaction has been soft-deleted and is excluded from active participant balance calculations. Its historical record is preserved below.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Locked Notification Banner -->
+        <div th:if="${transaction.isLocked and not transaction.isDeleted}" class="p-4 rounded-md bg-amber-50 border border-amber-200">
+            <div class="flex items-center">
+                <svg class="h-5 w-5 text-amber-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <div>
+                    <h3 class="text-sm font-semibold text-amber-800">Locked Transaction</h3>
+                    <p class="text-xs text-amber-700 mt-0.5">This transaction has been settled and locked against direct edits to preserve historical balance integrity. Corrections should be recorded using the Adjust button.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transaction Overview Card -->
+        <div class="bg-white shadow rounded-lg border border-gray-200 p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 pb-5">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-2xl font-bold text-gray-900" th:text="${transaction.description}">Transaction Description</h1>
+                        <!-- Locked badge -->
+                        <span th:if="${transaction.isLocked}"
+                              class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-300">
+                            Locked
+                        </span>
+                        <!-- Deleted badge -->
+                        <span th:if="${transaction.isDeleted}"
+                              class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-200">
+                            Deleted
+                        </span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 mt-2 text-sm text-gray-500">
+                        <span>Group: <a th:href="@{/groups/{id}(id=${transaction.group.id})}" class="text-indigo-600 hover:underline font-medium" th:text="${transaction.group.name}">Apartment</a></span>
+                        <span>&bull;</span>
+                        <span>Date: <span th:text="${#temporals.format(transaction.createdAt, 'dd MMM yyyy HH:mm')}">Date</span></span>
+                    </div>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="flex items-center gap-2">
+                    <!-- Unlocked actions: Edit and Delete -->
+                    <th:block th:if="${not transaction.isLocked and not transaction.isDeleted}">
+                        <a th:href="@{/transactions/{id}/edit(id=${transaction.id})}"
+                           class="inline-flex items-center px-3.5 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <svg class="-ml-0.5 mr-1.5 h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit Transaction
+                        </a>
+                        <form th:action="@{/transactions/{id}/delete(id=${transaction.id})}" method="post" class="inline"
+                              onsubmit="return confirm('Are you sure you want to soft-delete this transaction? An audit log will be recorded.');">
+                            <button type="submit"
+                                    class="inline-flex items-center px-3.5 py-2 border border-red-300 shadow-sm text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                                <svg class="-ml-0.5 mr-1.5 h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Delete Transaction
+                            </button>
+                        </form>
+                    </th:block>
+
+                    <!-- Locked actions: Adjust button -->
+                    <th:block th:if="${transaction.isLocked and not transaction.isDeleted}">
+                        <a th:href="@{/transactions/{id}/adjust(id=${transaction.id})}"
+                           class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <svg class="-ml-0.5 mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            Adjust
+                        </a>
+                    </th:block>
+                </div>
+            </div>
+
+            <!-- Transaction Details Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-5">
+                <div class="bg-gray-50 rounded-md p-4 border border-gray-100">
+                    <span class="text-xs font-medium text-gray-500 uppercase tracking-wider block">Total Amount</span>
+                    <span class="text-xl font-bold text-gray-900 mt-1 block"
+                          th:text="${T(com.jacobcraig.debtmngr.web.FormattersKt).toFormattedMoney(transaction.amount)}">£20.00</span>
+                </div>
+                <div class="bg-gray-50 rounded-md p-4 border border-gray-100">
+                    <span class="text-xs font-medium text-gray-500 uppercase tracking-wider block">Paid By (Payer)</span>
+                    <span class="text-base font-semibold text-gray-900 mt-1 block" th:text="${transaction.payer.name}">Alice</span>
+                </div>
+                <div class="bg-gray-50 rounded-md p-4 border border-gray-100">
+                    <span class="text-xs font-medium text-gray-500 uppercase tracking-wider block">Transaction Type</span>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold mt-1"
+                          th:classappend="${transaction.type == T(com.jacobcraig.debtmngr.domain.TransactionType).EXPENSE ? 'bg-indigo-100 text-indigo-800' : (transaction.type == T(com.jacobcraig.debtmngr.domain.TransactionType).SETTLEMENT ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800')}"
+                          th:text="${transaction.type}">
+                        EXPENSE
+                    </span>
+                </div>
+                <div class="bg-gray-50 rounded-md p-4 border border-gray-100">
+                    <span class="text-xs font-medium text-gray-500 uppercase tracking-wider block">Category</span>
+                    <span th:if="${transaction.category != null}"
+                          class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800 mt-1"
+                          th:text="${transaction.category.name}">
+                        Groceries
+                    </span>
+                    <span th:unless="${transaction.category != null}" class="text-sm text-gray-400 italic mt-1 block">
+                        Uncategorized
+                    </span>
+                </div>
+            </div>
+
+            <!-- Linked original transaction (if this is an adjustment) -->
+            <div th:if="${transaction.originalTransaction != null}" class="mt-4 p-3 bg-indigo-50 border border-indigo-200 rounded-md">
+                <span class="text-xs font-medium text-indigo-700">Linked Original Transaction:</span>
+                <a th:href="@{/transactions/{id}(id=${transaction.originalTransaction.id})}"
+                   class="text-sm font-semibold text-indigo-900 hover:underline ml-1">
+                    <span th:text="${transaction.originalTransaction.description}">Original Description</span>
+                    (<span th:text="${T(com.jacobcraig.debtmngr.web.FormattersKt).toFormattedMoney(transaction.originalTransaction.amount)}">£100.00</span>)
+                </a>
+            </div>
+
+            <!-- Linked adjustments (if this transaction has been adjusted) -->
+            <div th:if="${not #lists.isEmpty(adjustments)}" class="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-md">
+                <span class="text-xs font-medium text-purple-700 block mb-1">Adjustments linked to this transaction:</span>
+                <ul class="space-y-1">
+                    <li th:each="adj : ${adjustments}">
+                        <a th:href="@{/transactions/{id}(id=${adj.id})}"
+                           class="text-sm font-medium text-purple-900 hover:underline flex items-center gap-2">
+                            <span>&bull;</span>
+                            <span th:text="${adj.description}">Adjustment</span>
+                            <span class="font-semibold" th:text="${T(com.jacobcraig.debtmngr.web.FormattersKt).toFormattedMoney(adj.amount)}">£10.00</span>
+                            <span class="text-xs text-purple-600">(<span th:text="${#temporals.format(adj.createdAt, 'dd MMM yyyy')}">date</span>)</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Double-Entry Ledger Breakdown Section -->
+        <div class="bg-white shadow rounded-lg border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <div class="flex items-center space-x-2">
+                    <h2 class="text-lg font-semibold text-gray-900">Double-Entry Ledger Lines</h2>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800"
+                          th:text="${#lists.size(entries)}">0</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span th:if="${transaction.isBalanced()}"
+                          class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                        &check; Balanced
+                    </span>
+                    <span th:unless="${transaction.isBalanced()}"
+                          class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                        Unbalanced
+                    </span>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Participant / Account
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Entry Type
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Debit
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Credit
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <tr th:each="entry : ${entries}" class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                <span th:text="${participantsByAccountId[entry.account.id]?.name ?: ('Account #' + entry.account.id)}">Alice</span>
+                                <span th:if="${participantsByAccountId[entry.account.id]?.isSelf}"
+                                      class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200 ml-1">
+                                    You
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <span th:if="${entry.type == T(com.jacobcraig.debtmngr.domain.EntryType).CREDIT}"
+                                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                    CREDIT (Payer)
+                                </span>
+                                <span th:if="${entry.type == T(com.jacobcraig.debtmngr.domain.EntryType).DEBIT}"
+                                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
+                                    DEBIT (Owed Share)
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">
+                                <span th:if="${entry.type == T(com.jacobcraig.debtmngr.domain.EntryType).DEBIT}"
+                                      th:text="${T(com.jacobcraig.debtmngr.web.FormattersKt).toFormattedMoney(entry.amount)}">
+                                    £10.00
+                                </span>
+                                <span th:unless="${entry.type == T(com.jacobcraig.debtmngr.domain.EntryType).DEBIT}" class="text-gray-300">-</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">
+                                <span th:if="${entry.type == T(com.jacobcraig.debtmngr.domain.EntryType).CREDIT}"
+                                      th:text="${T(com.jacobcraig.debtmngr.web.FormattersKt).toFormattedMoney(entry.amount)}">
+                                    £20.00
+                                </span>
+                                <span th:unless="${entry.type == T(com.jacobcraig.debtmngr.domain.EntryType).CREDIT}" class="text-gray-300">-</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="bg-gray-50 border-t-2 border-gray-300">
+                        <tr>
+                            <th scope="row" colspan="2" class="px-6 py-3 text-left text-xs font-bold text-gray-900 uppercase">
+                                Total (Double-Entry Invariant: &sum; Debits == &sum; Credits)
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-900"
+                                th:text="${T(com.jacobcraig.debtmngr.web.FormattersKt).toFormattedMoney(transaction.totalDebits())}">
+                                £20.00
+                            </th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-900"
+                                th:text="${T(com.jacobcraig.debtmngr.web.FormattersKt).toFormattedMoney(transaction.totalCredits())}">
+                                £20.00
+                            </th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- Audit History Section -->
+        <div class="bg-white shadow rounded-lg border border-gray-200 p-6">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-200 pb-3">
+                <div class="flex items-center space-x-2">
+                    <h2 class="text-lg font-semibold text-gray-900">Audit History</h2>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800"
+                          th:text="${#lists.size(auditLogs)}">0</span>
+                </div>
+            </div>
+
+            <div th:if="${#lists.isEmpty(auditLogs)}" class="text-center py-6 text-sm text-gray-500">
+                No modifications or deletions recorded for this transaction. Initial state is intact.
+            </div>
+
+            <div th:unless="${#lists.isEmpty(auditLogs)}" class="space-y-4">
+                <div th:each="log : ${auditLogs}" class="border rounded-md p-4 bg-gray-50 border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
+                                  th:classappend="${log.action == T(com.jacobcraig.debtmngr.domain.AuditAction).EDIT ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}"
+                                  th:text="${log.action}">
+                                EDIT
+                            </span>
+                            <span class="text-xs text-gray-500" th:text="${#temporals.format(log.createdAt, 'dd MMM yyyy HH:mm:ss')}">
+                                Timestamp
+                            </span>
+                        </div>
+                    </div>
+                    <div th:if="${log.reason != null and !#strings.isEmpty(log.reason)}" class="mt-2 text-sm text-gray-700">
+                        <span class="font-medium text-gray-900">Reason:</span> <span th:text="${log.reason}">Reason text</span>
+                    </div>
+                    <div class="mt-2">
+                        <span class="text-xs font-medium text-gray-500 block mb-1">Preserved Prior State Snapshot:</span>
+                        <pre class="bg-white border border-gray-200 rounded p-2 text-xs text-gray-600 overflow-x-auto" th:text="${log.serializedPriorState}">{}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

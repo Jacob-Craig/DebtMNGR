@@ -232,7 +232,13 @@
                         <tr th:each="tx : ${transactions}" class="hover:bg-gray-50">
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                 <div class="flex items-center gap-2">
-                                    <span th:text="${tx.description}">Dinner</span>
+                                    <a th:href="@{/transactions/{id}(id=${tx.id})}"
+                                       class="text-indigo-600 hover:text-indigo-900 hover:underline font-semibold"
+                                       th:text="${tx.description}">Dinner</a>
+                                    <span th:if="${tx.type == T(com.jacobcraig.debtmngr.domain.TransactionType).ADJUSTMENT}"
+                                          class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                                        Adjustment
+                                    </span>
                                     <span th:if="${tx.isLocked}"
                                           class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200"
                                           title="Locked after settlement">

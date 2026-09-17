@@ -1,6 +1,7 @@
 package com.jacobcraig.debtmngr.service
 
 import com.jacobcraig.debtmngr.domain.*
+import com.jacobcraig.debtmngr.repository.AuditLogRepository
 import com.jacobcraig.debtmngr.repository.CategoryRepository
 import com.jacobcraig.debtmngr.repository.EntryRepository
 import com.jacobcraig.debtmngr.repository.GroupRepository
@@ -18,7 +19,8 @@ class TransactionService(
     private val participantRepository: ParticipantRepository,
     private val transactionRepository: TransactionRepository,
     private val entryRepository: EntryRepository,
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val auditLogRepository: AuditLogRepository
 ) {
 
     @JvmOverloads
@@ -233,6 +235,269 @@ class TransactionService(
             val balance = credits - debits
 
             participantId to balance
+        }
+    }
+
+    @Transactional(readOnly = true)
+    fun getTransaction(id: Long): Transaction {
+        return transactionRepository.findById(id)
+            .orElseThrow { EntityNotFoundException("Transaction not found with id: $id") }
+    }
+
+    @Transactional(readOnly = true)
+    fun getAuditLogs(transactionId: Long): List<AuditLog> {
+        return auditLogRepository.findByTransactionIdOrderByCreatedAtAscIdAsc(transactionId)
+    }
+
+    @Transactional(readOnly = true)
+    fun getAdjustments(originalTransactionId: Long): List<Transaction> {
+        return transactionRepository.findByOriginalTransactionIdAndIsDeletedFalseOrderByCreatedAtAscIdAsc(originalTransactionId)
+    }
+
+    fun deleteTransaction(transactionId: Long, reason: String? = null): Transaction {
+        val transaction = transactionRepository.findById(transactionId)
+            .orElseThrow { EntityNotFoundException("Transaction not found with id: $transactionId") }
+        check(!transaction.isLocked) { "Cannot delete a locked transaction" }
+        check(!transaction.isDeleted) { "Transaction is already deleted" }
+
+        val priorState = serializeTransactionState(transaction)
+        transaction.softDelete()
+        val saved = transactionRepository.save(transaction)
+
+        val auditLog = AuditLog(
+            transaction = transaction,
+            action = AuditAction.DELETE,
+            serializedPriorState = priorState,
+            reason = reason?.trim()?.ifBlank { null }
+        )
+        auditLogRepository.save(auditLog)
+
+        return saved
+    }
+
+    @JvmOverloads
+    fun editExpense(
+        transactionId: Long,
+        description: String,
+        amount: Long,
+        payerId: Long,
+        consumerIds: List<Long> = emptyList(),
+        date: Instant? = null,
+        splitMode: SplitMode = SplitMode.EQUAL,
+        exactAmounts: Map<Long, Long> = emptyMap(),
+        categoryId: Long? = null,
+        reason: String? = null
+    ): Transaction {
+        val oldTx = transactionRepository.findById(transactionId)
+            .orElseThrow { EntityNotFoundException("Transaction not found with id: $transactionId") }
+
+        check(!oldTx.isLocked) { "Cannot edit a locked transaction" }
+        check(!oldTx.isDeleted) { "Cannot edit a deleted transaction" }
+        require(description.isNotBlank()) { "Expense description cannot be blank" }
+        require(amount > 0) { "Expense amount must be positive" }
+
+        val groupId = checkNotNull(oldTx.group.id)
+        val payer = participantRepository.findById(payerId)
+            .orElseThrow { EntityNotFoundException("Participant not found with id: $payerId") }
+        require(payer.group.id == groupId) { "Payer does not belong to group $groupId" }
+
+        val (shares, participantMap) = when (splitMode) {
+            SplitMode.EQUAL -> {
+                require(consumerIds.isNotEmpty()) { "At least one consumer must be selected" }
+                val distinctConsumerIds = consumerIds.distinct()
+                val participants = loadGroupParticipants(groupId, distinctConsumerIds, "Consumer")
+                val shares = EqualSplitCalculator.calculate(
+                    totalAmount = amount,
+                    payerId = payerId,
+                    consumerIds = distinctConsumerIds
+                )
+                shares to participants
+            }
+            SplitMode.EXACT -> {
+                require(exactAmounts.isNotEmpty()) { "At least one consumer must be assigned an amount" }
+                val participants = loadGroupParticipants(groupId, exactAmounts.keys, "Participant")
+                val shares = ExactSplitCalculator.calculate(
+                    totalAmount = amount,
+                    exactAmounts = exactAmounts
+                )
+                shares to participants
+            }
+        }
+
+        val category = categoryId?.let { catId ->
+            val cat = categoryRepository.findById(catId)
+                .orElseThrow { EntityNotFoundException("Category not found with id: $catId") }
+            require(cat.isAvailableIn(oldTx.group)) {
+                "Category ${cat.name} does not belong to group $groupId"
+            }
+            cat
+        }
+
+        val priorState = serializeTransactionState(oldTx)
+        oldTx.softDelete()
+        transactionRepository.save(oldTx)
+
+        val auditLog = AuditLog(
+            transaction = oldTx,
+            action = AuditAction.EDIT,
+            serializedPriorState = priorState,
+            reason = reason?.trim()?.ifBlank { null }
+        )
+        auditLogRepository.save(auditLog)
+
+        val newTransaction = Transaction(
+            group = oldTx.group,
+            description = description.trim(),
+            amount = amount,
+            payer = payer,
+            type = TransactionType.EXPENSE,
+            category = category,
+            createdAt = date ?: oldTx.createdAt,
+            originalTransaction = oldTx
+        )
+
+        val creditEntry = Entry(
+            transaction = newTransaction,
+            account = payer.account,
+            type = EntryType.CREDIT,
+            amount = amount
+        )
+        newTransaction.addEntry(creditEntry)
+
+        for (share in shares) {
+            if (share.amount > 0) {
+                val consumer = participantMap.getValue(share.participantId)
+                val debitEntry = Entry(
+                    transaction = newTransaction,
+                    account = consumer.account,
+                    type = EntryType.DEBIT,
+                    amount = share.amount
+                )
+                newTransaction.addEntry(debitEntry)
+            }
+        }
+
+        val totalDebits = newTransaction.totalDebits()
+        val totalCredits = newTransaction.totalCredits()
+        check(totalDebits == amount && totalCredits == amount) {
+            "Total debits ($totalDebits) and credits ($totalCredits) must equal expense amount ($amount)"
+        }
+        newTransaction.validateDoubleEntry()
+
+        return transactionRepository.save(newTransaction)
+    }
+
+    @JvmOverloads
+    fun createAdjustment(
+        originalTransactionId: Long,
+        description: String,
+        amount: Long,
+        payerId: Long,
+        consumerIds: List<Long> = emptyList(),
+        splitMode: SplitMode = SplitMode.EQUAL,
+        exactAmounts: Map<Long, Long> = emptyMap(),
+        date: Instant? = null
+    ): Transaction {
+        val originalTx = transactionRepository.findById(originalTransactionId)
+            .orElseThrow { EntityNotFoundException("Transaction not found with id: $originalTransactionId") }
+
+        require(originalTx.isLocked) { "Adjustment can only be made to a locked transaction" }
+        require(!originalTx.isDeleted) { "Cannot adjust a deleted transaction" }
+        require(description.isNotBlank()) { "Adjustment description cannot be blank" }
+        require(amount > 0) { "Adjustment amount must be positive" }
+
+        val groupId = checkNotNull(originalTx.group.id)
+        val payer = participantRepository.findById(payerId)
+            .orElseThrow { EntityNotFoundException("Participant not found with id: $payerId") }
+        require(payer.group.id == groupId) { "Payer does not belong to group $groupId" }
+
+        val (shares, participantMap) = when (splitMode) {
+            SplitMode.EQUAL -> {
+                require(consumerIds.isNotEmpty()) { "At least one consumer must be selected" }
+                val distinctConsumerIds = consumerIds.distinct()
+                val participants = loadGroupParticipants(groupId, distinctConsumerIds, "Consumer")
+                val shares = EqualSplitCalculator.calculate(
+                    totalAmount = amount,
+                    payerId = payerId,
+                    consumerIds = distinctConsumerIds
+                )
+                shares to participants
+            }
+            SplitMode.EXACT -> {
+                require(exactAmounts.isNotEmpty()) { "At least one consumer must be assigned an amount" }
+                val participants = loadGroupParticipants(groupId, exactAmounts.keys, "Participant")
+                val shares = ExactSplitCalculator.calculate(
+                    totalAmount = amount,
+                    exactAmounts = exactAmounts
+                )
+                shares to participants
+            }
+        }
+
+        val adjustment = Transaction(
+            group = originalTx.group,
+            description = description.trim(),
+            amount = amount,
+            payer = payer,
+            type = TransactionType.ADJUSTMENT,
+            category = originalTx.category,
+            originalTransaction = originalTx,
+            createdAt = date ?: Instant.now()
+        )
+
+        val creditEntry = Entry(
+            transaction = adjustment,
+            account = payer.account,
+            type = EntryType.CREDIT,
+            amount = amount
+        )
+        adjustment.addEntry(creditEntry)
+
+        for (share in shares) {
+            if (share.amount > 0) {
+                val consumer = participantMap.getValue(share.participantId)
+                val debitEntry = Entry(
+                    transaction = adjustment,
+                    account = consumer.account,
+                    type = EntryType.DEBIT,
+                    amount = share.amount
+                )
+                adjustment.addEntry(debitEntry)
+            }
+        }
+
+        val totalDebits = adjustment.totalDebits()
+        val totalCredits = adjustment.totalCredits()
+        check(totalDebits == amount && totalCredits == amount) {
+            "Total debits ($totalDebits) and credits ($totalCredits) must equal adjustment amount ($amount)"
+        }
+        adjustment.validateDoubleEntry()
+
+        return transactionRepository.save(adjustment)
+    }
+
+    private fun serializeTransactionState(transaction: Transaction): String {
+        fun escape(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r")
+
+        val entriesJson = transaction.entries.joinToString(separator = ",", prefix = "[", postfix = "]") { entry ->
+            """{"id":${entry.id},"accountId":${entry.account.id},"type":"${entry.type.name}","amount":${entry.amount}}"""
+        }
+
+        return buildString {
+            append("{")
+            append(""""id":${transaction.id},""")
+            append(""""description":"${escape(transaction.description)}",""")
+            append(""""amount":${transaction.amount},""")
+            append(""""payerId":${transaction.payer.id},""")
+            append(""""payerName":"${escape(transaction.payer.name)}",""")
+            append(""""type":"${transaction.type.name}",""")
+            append(""""categoryId":${transaction.category?.id},""")
+            append(""""categoryName":${transaction.category?.name?.let { "\"${escape(it)}\"" } ?: "null"},""")
+            append(""""isLocked":${transaction.isLocked},""")
+            append(""""isDeleted":${transaction.isDeleted},""")
+            append(""""createdAt":"${transaction.createdAt}",""")
+            append(""""entries":$entriesJson""")
+            append("}")
         }
     }
 

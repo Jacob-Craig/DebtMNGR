@@ -57,6 +57,13 @@ class Transaction(
                 "Category ${cat.name} does not belong to group ${group.id ?: group.name}"
             }
         }
+        if (type == TransactionType.ADJUSTMENT) {
+            require(originalTransaction != null) { "Adjustment transaction must link to an original transaction" }
+            require(originalTransaction?.isLocked == true) { "Adjustment can only be made to a locked transaction" }
+            require(originalTransaction?.group?.id == group.id) {
+                "Adjustment transaction must belong to the same group as original transaction"
+            }
+        }
     }
 
     fun addEntry(entry: Entry) {
@@ -83,5 +90,11 @@ class Transaction(
 
     fun lock() {
         isLocked = true
+    }
+
+    fun softDelete() {
+        check(!isLocked) { "Cannot delete a locked transaction" }
+        check(!isDeleted) { "Transaction is already deleted" }
+        isDeleted = true
     }
 }

@@ -18,6 +18,11 @@ interface TransactionRepository : JpaRepository<Transaction, Long> {
         categoryId: Long
     ): List<Transaction>
 
+    @EntityGraph(attributePaths = ["payer", "category"])
+    fun findByOriginalTransactionIdAndIsDeletedFalseOrderByCreatedAtAscIdAsc(
+        originalTransactionId: Long
+    ): List<Transaction>
+
     @Query("""
         SELECT DISTINCT t FROM Transaction t
         JOIN t.entries e1

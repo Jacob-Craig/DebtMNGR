@@ -261,4 +261,152 @@ class TransactionTest {
         tx.isLocked = true
         assertTrue(tx.isLocked)
     }
+
+    @Test
+    fun `softDelete marks transaction as deleted`() {
+        val group = Group(name = "Apartment")
+        val alice = Participant(group = group, name = "Alice")
+        val tx = Transaction(
+            group = group,
+            description = "Dinner",
+            amount = 2000L,
+            payer = alice
+        )
+
+        assertFalse(tx.isDeleted)
+        tx.softDelete()
+        assertTrue(tx.isDeleted)
+    }
+
+    @Test
+    fun `softDelete on locked transaction throws IllegalStateException`() {
+        val group = Group(name = "Apartment")
+        val alice = Participant(group = group, name = "Alice")
+        val tx = Transaction(
+            group = group,
+            description = "Dinner",
+            amount = 2000L,
+            payer = alice,
+            isLocked = true
+        )
+
+        val ex = assertThrows<IllegalStateException> {
+            tx.softDelete()
+        }
+        assertEquals("Cannot delete a locked transaction", ex.message)
+    }
+
+    @Test
+    fun `softDelete on already deleted transaction throws IllegalStateException`() {
+        val group = Group(name = "Apartment")
+        val alice = Participant(group = group, name = "Alice")
+        val tx = Transaction(
+            group = group,
+            description = "Dinner",
+            amount = 2000L,
+            payer = alice
+        )
+
+        tx.softDelete()
+        val ex = assertThrows<IllegalStateException> {
+            tx.softDelete()
+        }
+        assertEquals("Transaction is already deleted", ex.message)
+    }
+
+    @Test
+    fun `adjustment transaction linking to locked original succeeds`() {
+        val group = Group(id = 1L, name = "Apartment")
+        val alice = Participant(group = group, name = "Alice")
+        val originalTx = Transaction(
+            group = group,
+            description = "Hotel",
+            amount = 10000L,
+            payer = alice,
+            isLocked = true
+        )
+
+        val adjustment = Transaction(
+            group = group,
+            description = "Adjustment: City tax for Hotel",
+            amount = 1500L,
+            payer = alice,
+            type = TransactionType.ADJUSTMENT,
+            originalTransaction = originalTx
+        )
+
+        assertEquals(TransactionType.ADJUSTMENT, adjustment.type)
+        assertSame(originalTx, adjustment.originalTransaction)
+    }
+
+    @Test
+    fun `adjustment without original transaction throws IllegalArgumentException`() {
+        val group = Group(name = "Apartment")
+        val alice = Participant(group = group, name = "Alice")
+
+        val ex = assertThrows<IllegalArgumentException> {
+            Transaction(
+                group = group,
+                description = "Adjustment",
+                amount = 1500L,
+                payer = alice,
+                type = TransactionType.ADJUSTMENT,
+                originalTransaction = null
+            )
+        }
+        assertEquals("Adjustment transaction must link to an original transaction", ex.message)
+    }
+
+    @Test
+    fun `adjustment linking to unlocked original throws IllegalArgumentException`() {
+        val group = Group(name = "Apartment")
+        val alice = Participant(group = group, name = "Alice")
+        val unlockedTx = Transaction(
+            group = group,
+            description = "Hotel",
+            amount = 10000L,
+            payer = alice,
+            isLocked = false
+        )
+
+        val ex = assertThrows<IllegalArgumentException> {
+            Transaction(
+                group = group,
+                description = "Adjustment",
+                amount = 1500L,
+                payer = alice,
+                type = TransactionType.ADJUSTMENT,
+                originalTransaction = unlockedTx
+            )
+        }
+        assertEquals("Adjustment can only be made to a locked transaction", ex.message)
+    }
+
+    @Test
+    fun `adjustment linking to original in different group throws IllegalArgumentException`() {
+        val group1 = Group(id = 1L, name = "Apartment 1")
+        val group2 = Group(id = 2L, name = "Apartment 2")
+        val alice = Participant(group = group1, name = "Alice")
+        val bob = Participant(group = group2, name = "Bob")
+        val lockedInGroup2 = Transaction(
+            group = group2,
+            description = "Hotel",
+            amount = 10000L,
+            payer = bob,
+            isLocked = true
+        )
+
+        val ex = assertThrows<IllegalArgumentException> {
+            Transaction(
+                group = group1,
+                description = "Adjustment",
+                amount = 1500L,
+                payer = alice,
+                type = TransactionType.ADJUSTMENT,
+                originalTransaction = lockedInGroup2
+            )
+        }
+        assertEquals("Adjustment transaction must belong to the same group as original transaction", ex.message)
+    }
 }
+

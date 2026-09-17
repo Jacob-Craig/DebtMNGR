@@ -6,6 +6,7 @@ import com.jacobcraig.debtmngr.domain.EntryType
 import com.jacobcraig.debtmngr.domain.Group
 import com.jacobcraig.debtmngr.domain.Participant
 import com.jacobcraig.debtmngr.domain.Transaction
+import com.jacobcraig.debtmngr.domain.TransactionType
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -172,5 +173,50 @@ class TransactionRepositoryTest @Autowired constructor(
         assertEquals("Groceries", results[0].description)
         assertFalse(results[0].isLocked)
         assertFalse(results[0].isDeleted)
+    }
+
+    @Test
+    fun `findByOriginalTransactionIdAndIsDeletedFalseOrderByCreatedAtAscIdAsc returns active adjustments`() {
+        val group = entityManager.persist(Group(name = "Apartment"))
+        val alice = entityManager.persist(Participant(group = group, name = "Alice"))
+        val originalTx = entityManager.persist(
+            Transaction(
+                group = group,
+                description = "Locked Rent",
+                amount = 10000L,
+                payer = alice,
+                isLocked = true
+            )
+        )
+
+        val adj1 = Transaction(
+            group = group,
+            description = "Adjustment: Late fee",
+            amount = 500L,
+            payer = alice,
+            type = TransactionType.ADJUSTMENT,
+            originalTransaction = originalTx
+        )
+        val adj2 = Transaction(
+            group = group,
+            description = "Adjustment: Cancelled fee",
+            amount = 300L,
+            payer = alice,
+            type = TransactionType.ADJUSTMENT,
+            originalTransaction = originalTx,
+            isDeleted = true
+        )
+
+        transactionRepository.save(adj1)
+        transactionRepository.save(adj2)
+        entityManager.flush()
+        entityManager.clear()
+
+        val adjustments = transactionRepository.findByOriginalTransactionIdAndIsDeletedFalseOrderByCreatedAtAscIdAsc(
+            checkNotNull(originalTx.id)
+        )
+        assertEquals(1, adjustments.size)
+        assertEquals("Adjustment: Late fee", adjustments[0].description)
+        assertEquals(500L, adjustments[0].amount)
     }
 }

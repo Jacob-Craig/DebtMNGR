@@ -1,6 +1,7 @@
 package com.jacobcraig.debtmngr.service
 
 import com.jacobcraig.debtmngr.domain.*
+import com.jacobcraig.debtmngr.repository.AuditLogRepository
 import com.jacobcraig.debtmngr.repository.CategoryRepository
 import com.jacobcraig.debtmngr.repository.EntryRepository
 import com.jacobcraig.debtmngr.repository.GroupRepository
@@ -22,6 +23,7 @@ class TransactionServiceTest {
     private lateinit var transactionRepository: TransactionRepository
     private lateinit var entryRepository: EntryRepository
     private lateinit var categoryRepository: CategoryRepository
+    private lateinit var auditLogRepository: AuditLogRepository
     private lateinit var transactionService: TransactionService
 
     private val group = Group(id = 1L, name = "Apartment")
@@ -39,13 +41,15 @@ class TransactionServiceTest {
         transactionRepository = mock(TransactionRepository::class.java)
         entryRepository = mock(EntryRepository::class.java)
         categoryRepository = mock(CategoryRepository::class.java)
+        auditLogRepository = mock(AuditLogRepository::class.java)
 
         transactionService = TransactionService(
             groupRepository = groupRepository,
             participantRepository = participantRepository,
             transactionRepository = transactionRepository,
             entryRepository = entryRepository,
-            categoryRepository = categoryRepository
+            categoryRepository = categoryRepository,
+            auditLogRepository = auditLogRepository
         )
 
         `when`(groupRepository.findById(1L)).thenReturn(Optional.of(group))
@@ -799,5 +803,239 @@ class TransactionServiceTest {
             )
         }
         assertEquals("Receiver does not belong to group 1", ex.message)
+    }
+
+    @Test
+    fun `getTransaction returns transaction when found`() {
+        val tx = Transaction(id = 500L, group = group, description = "Lunch", amount = 1500L, payer = alice)
+        `when`(transactionRepository.findById(500L)).thenReturn(Optional.of(tx))
+
+        val result = transactionService.getTransaction(500L)
+        assertSame(tx, result)
+        verify(transactionRepository).findById(500L)
+    }
+
+    @Test
+    fun `getTransaction throws EntityNotFoundException when not found`() {
+        `when`(transactionRepository.findById(999L)).thenReturn(Optional.empty())
+
+        val ex = assertThrows<EntityNotFoundException> {
+            transactionService.getTransaction(999L)
+        }
+        assertEquals("Transaction not found with id: 999", ex.message)
+    }
+
+    @Test
+    fun `getAuditLogs delegates to auditLogRepository`() {
+        val log = AuditLog(
+            transaction = Transaction(id = 100L, group = group, description = "Old", amount = 500L, payer = alice),
+            action = AuditAction.EDIT,
+            serializedPriorState = "{}"
+        )
+        `when`(auditLogRepository.findByTransactionIdOrderByCreatedAtAscIdAsc(100L)).thenReturn(listOf(log))
+
+        val logs = transactionService.getAuditLogs(100L)
+        assertEquals(1, logs.size)
+        assertSame(log, logs[0])
+    }
+
+    @Test
+    fun `getAdjustments delegates to transactionRepository`() {
+        val adj = Transaction(
+            id = 200L,
+            group = group,
+            description = "Adjustment",
+            amount = 300L,
+            payer = alice,
+            type = TransactionType.ADJUSTMENT,
+            originalTransaction = Transaction(id = 100L, group = group, description = "Original", amount = 1000L, payer = alice, isLocked = true)
+        )
+        `when`(transactionRepository.findByOriginalTransactionIdAndIsDeletedFalseOrderByCreatedAtAscIdAsc(100L))
+            .thenReturn(listOf(adj))
+
+        val adjustments = transactionService.getAdjustments(100L)
+        assertEquals(1, adjustments.size)
+        assertSame(adj, adjustments[0])
+    }
+
+    @Test
+    fun `deleteTransaction on unlocked transaction soft-deletes and creates DELETE AuditLog`() {
+        val tx = Transaction(id = 500L, group = group, description = "Lunch", amount = 1500L, payer = alice)
+        tx.addEntry(Entry(transaction = tx, account = aliceAccount, type = EntryType.CREDIT, amount = 1500L))
+        tx.addEntry(Entry(transaction = tx, account = bobAccount, type = EntryType.DEBIT, amount = 1500L))
+        `when`(transactionRepository.findById(500L)).thenReturn(Optional.of(tx))
+        `when`(transactionRepository.save(any(Transaction::class.java))).thenAnswer { it.arguments[0] }
+
+        val deleted = transactionService.deleteTransaction(500L, reason = "Mistake")
+        assertTrue(deleted.isDeleted)
+
+        val logCaptor = ArgumentCaptor.forClass(AuditLog::class.java)
+        verify(auditLogRepository).save(logCaptor.capture())
+        val savedLog = logCaptor.value
+        assertEquals(AuditAction.DELETE, savedLog.action)
+        assertEquals("Mistake", savedLog.reason)
+        assertSame(tx, savedLog.transaction)
+        assertTrue(savedLog.serializedPriorState.contains("Lunch"))
+    }
+
+    @Test
+    fun `deleteTransaction on locked transaction throws IllegalStateException`() {
+        val tx = Transaction(id = 500L, group = group, description = "Settled Lunch", amount = 1500L, payer = alice, isLocked = true)
+        `when`(transactionRepository.findById(500L)).thenReturn(Optional.of(tx))
+
+        val ex = assertThrows<IllegalStateException> {
+            transactionService.deleteTransaction(500L)
+        }
+        assertEquals("Cannot delete a locked transaction", ex.message)
+        verify(auditLogRepository, never()).save(any())
+    }
+
+    @Test
+    fun `deleteTransaction on already deleted transaction throws IllegalStateException`() {
+        val tx = Transaction(id = 500L, group = group, description = "Deleted Lunch", amount = 1500L, payer = alice, isDeleted = true)
+        `when`(transactionRepository.findById(500L)).thenReturn(Optional.of(tx))
+
+        val ex = assertThrows<IllegalStateException> {
+            transactionService.deleteTransaction(500L)
+        }
+        assertEquals("Transaction is already deleted", ex.message)
+        verify(auditLogRepository, never()).save(any())
+    }
+
+    @Test
+    fun `editExpense on unlocked transaction soft-deletes old transaction, saves EDIT AuditLog, and creates replacement transaction`() {
+        val oldTx = Transaction(id = 500L, group = group, description = "Dinner typo", amount = 2000L, payer = alice)
+        oldTx.addEntry(Entry(transaction = oldTx, account = aliceAccount, type = EntryType.CREDIT, amount = 2000L))
+        oldTx.addEntry(Entry(transaction = oldTx, account = bobAccount, type = EntryType.DEBIT, amount = 2000L))
+        `when`(transactionRepository.findById(500L)).thenReturn(Optional.of(oldTx))
+        `when`(transactionRepository.save(any(Transaction::class.java))).thenAnswer { it.arguments[0] }
+
+        val newTx = transactionService.editExpense(
+            transactionId = 500L,
+            description = "Dinner corrected",
+            amount = 3000L,
+            payerId = 10L,
+            consumerIds = listOf(10L, 20L),
+            reason = "Fixed typo and added Bob share"
+        )
+
+        assertTrue(oldTx.isDeleted)
+        verify(transactionRepository).save(oldTx)
+
+        val logCaptor = ArgumentCaptor.forClass(AuditLog::class.java)
+        verify(auditLogRepository).save(logCaptor.capture())
+        val savedLog = logCaptor.value
+        assertEquals(AuditAction.EDIT, savedLog.action)
+        assertEquals("Fixed typo and added Bob share", savedLog.reason)
+        assertSame(oldTx, savedLog.transaction)
+        assertTrue(savedLog.serializedPriorState.contains("Dinner typo"))
+
+        assertEquals("Dinner corrected", newTx.description)
+        assertEquals(3000L, newTx.amount)
+        assertSame(oldTx, newTx.originalTransaction)
+        assertFalse(newTx.isDeleted)
+        assertFalse(newTx.isLocked)
+        assertEquals(3, newTx.entries.size)
+        assertTrue(newTx.isBalanced())
+    }
+
+    @Test
+    fun `editExpense on locked transaction throws IllegalStateException`() {
+        val lockedTx = Transaction(id = 500L, group = group, description = "Settled", amount = 2000L, payer = alice, isLocked = true)
+        `when`(transactionRepository.findById(500L)).thenReturn(Optional.of(lockedTx))
+
+        val ex = assertThrows<IllegalStateException> {
+            transactionService.editExpense(
+                transactionId = 500L,
+                description = "New description",
+                amount = 2000L,
+                payerId = 10L,
+                consumerIds = listOf(20L)
+            )
+        }
+        assertEquals("Cannot edit a locked transaction", ex.message)
+    }
+
+    @Test
+    fun `createAdjustment on locked transaction creates balanced ADJUSTMENT transaction linked to original`() {
+        val originalTx = Transaction(
+            id = 500L,
+            group = group,
+            description = "Original Hotel",
+            amount = 10000L,
+            payer = alice,
+            isLocked = true
+        )
+        `when`(transactionRepository.findById(500L)).thenReturn(Optional.of(originalTx))
+        `when`(transactionRepository.save(any(Transaction::class.java))).thenAnswer { it.arguments[0] }
+
+        val adjustment = transactionService.createAdjustment(
+            originalTransactionId = 500L,
+            description = "City tax adjustment",
+            amount = 2000L,
+            payerId = 10L,
+            consumerIds = listOf(10L, 20L)
+        )
+
+        assertEquals("City tax adjustment", adjustment.description)
+        assertEquals(2000L, adjustment.amount)
+        assertEquals(TransactionType.ADJUSTMENT, adjustment.type)
+        assertSame(originalTx, adjustment.originalTransaction)
+        assertFalse(adjustment.isLocked)
+        assertFalse(adjustment.isDeleted)
+        assertTrue(adjustment.isBalanced())
+        verify(transactionRepository).save(adjustment)
+    }
+
+    @Test
+    fun `createAdjustment on unlocked original transaction throws IllegalArgumentException`() {
+        val unlockedTx = Transaction(
+            id = 500L,
+            group = group,
+            description = "Unlocked Hotel",
+            amount = 10000L,
+            payer = alice,
+            isLocked = false
+        )
+        `when`(transactionRepository.findById(500L)).thenReturn(Optional.of(unlockedTx))
+
+        val ex = assertThrows<IllegalArgumentException> {
+            transactionService.createAdjustment(
+                originalTransactionId = 500L,
+                description = "Delta",
+                amount = 1000L,
+                payerId = 10L,
+                consumerIds = listOf(20L)
+            )
+        }
+        assertEquals("Adjustment can only be made to a locked transaction", ex.message)
+    }
+
+    @Test
+    fun `createAdjustment with exact split mode creates balanced ADJUSTMENT transaction`() {
+        val originalTx = Transaction(
+            id = 500L,
+            group = group,
+            description = "Locked Dinner",
+            amount = 5000L,
+            payer = alice,
+            isLocked = true
+        )
+        `when`(transactionRepository.findById(500L)).thenReturn(Optional.of(originalTx))
+        `when`(transactionRepository.save(any(Transaction::class.java))).thenAnswer { it.arguments[0] }
+
+        val adjustment = transactionService.createAdjustment(
+            originalTransactionId = 500L,
+            description = "Late tip adjustment",
+            amount = 1000L,
+            payerId = 10L,
+            splitMode = SplitMode.EXACT,
+            exactAmounts = mapOf(10L to 400L, 20L to 600L)
+        )
+
+        assertEquals("Late tip adjustment", adjustment.description)
+        assertEquals(1000L, adjustment.amount)
+        assertEquals(TransactionType.ADJUSTMENT, adjustment.type)
+        assertTrue(adjustment.isBalanced())
     }
 }
