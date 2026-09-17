@@ -45,32 +45,22 @@ class TransactionService(
             SplitMode.EQUAL -> {
                 require(consumerIds.isNotEmpty()) { "At least one consumer must be selected" }
                 val distinctConsumerIds = consumerIds.distinct()
-                val consumers = distinctConsumerIds.map { consumerId ->
-                    val consumer = participantRepository.findById(consumerId)
-                        .orElseThrow { EntityNotFoundException("Participant not found with id: $consumerId") }
-                    require(consumer.group.id == groupId) { "Consumer $consumerId does not belong to group $groupId" }
-                    consumer
-                }
+                val participants = loadGroupParticipants(groupId, distinctConsumerIds, "Consumer")
                 val shares = EqualSplitCalculator.calculate(
                     totalAmount = amount,
                     payerId = payerId,
                     consumerIds = distinctConsumerIds
                 )
-                shares to consumers.associateBy { checkNotNull(it.id) }
+                shares to participants
             }
             SplitMode.EXACT -> {
                 require(exactAmounts.isNotEmpty()) { "At least one consumer must be assigned an amount" }
-                val participants = exactAmounts.keys.map { participantId ->
-                    val participant = participantRepository.findById(participantId)
-                        .orElseThrow { EntityNotFoundException("Participant not found with id: $participantId") }
-                    require(participant.group.id == groupId) { "Participant $participantId does not belong to group $groupId" }
-                    participant
-                }
+                val participants = loadGroupParticipants(groupId, exactAmounts.keys, "Participant")
                 val shares = ExactSplitCalculator.calculate(
                     totalAmount = amount,
                     exactAmounts = exactAmounts
                 )
-                shares to participants.associateBy { checkNotNull(it.id) }
+                shares to participants
             }
         }
 
@@ -145,6 +135,19 @@ class TransactionService(
             val balance = credits - debits
 
             participantId to balance
+        }
+    }
+
+    private fun loadGroupParticipants(
+        groupId: Long,
+        participantIds: Collection<Long>,
+        roleName: String = "Participant"
+    ): Map<Long, Participant> {
+        return participantIds.associate { participantId ->
+            val participant = participantRepository.findById(participantId)
+                .orElseThrow { EntityNotFoundException("Participant not found with id: $participantId") }
+            require(participant.group.id == groupId) { "$roleName $participantId does not belong to group $groupId" }
+            checkNotNull(participant.id) to participant
         }
     }
 }
