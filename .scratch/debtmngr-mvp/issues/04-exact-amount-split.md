@@ -4,7 +4,7 @@
 
 **Blocked by:** 03: Equal-Split Expense Recording & Balances
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] The Expense form allows toggling between "Equal" and "Exact" split modes.
 - [ ] In "Exact" mode, the user inputs precise currency amounts for each selected consumer.
